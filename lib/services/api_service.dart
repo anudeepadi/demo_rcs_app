@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import '../models/message.dart';
 import '../models/quick_reply.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = 'http://localhost:8000/api';
 
+  // Get all messages
   Future<List<Message>> getMessages() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/messages'));
@@ -19,52 +21,82 @@ class ApiService {
     }
   }
 
-  Future<List<QuickReply>> getQuickReplies() async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/quick-replies'));
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => QuickReply.fromJson(json)).toList();
-      }
-      throw Exception('Failed to load quick replies');
-    } catch (e) {
-      throw Exception('Error: $e');
-    }
-  }
-
-  Future<void> sendMessage(Message message) async {
+  // Send a new message
+  Future<Map<String, Message>> sendMessage(Message message) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/messages'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode(message.toJson()),
       );
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        throw Exception('Failed to send message');
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return {
+          'userMessage': Message.fromJson(data['userMessage']),
+          'botResponse': Message.fromJson(data['botResponse']),
+        };
       }
+      throw Exception('Failed to send message');
     } catch (e) {
       throw Exception('Error: $e');
     }
   }
 
-  Future<String> uploadMedia(List<int> bytes, String fileName) async {
+  // Handle quick reply
+  Future<Message> handleQuickReply(QuickReply reply) async {
     try {
-      var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/media'));
+      final response = await http.post(
+        Uri.parse('$baseUrl/quick-replies'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode(reply.toJson()),
+      );
+      
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return Message.fromJson(data['botResponse']);
+      }
+      throw Exception('Failed to handle quick reply');
+    } catch (e) {
+      throw Exception('Error: $e');
+    }
+  }
+
+  // Upload media file
+  Future<String> uploadMedia(List<int> bytes, String fileName, String mimeType) async {
+    try {
+      var uri = Uri.parse('$baseUrl/media');
+      var request = http.MultipartRequest('POST', uri);
+      
       request.files.add(
         http.MultipartFile.fromBytes(
           'file',
           bytes,
           filename: fileName,
+          contentType: MediaType.parse(mimeType),
         ),
       );
 
-      final response = await request.send();
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final responseData = await response.stream.bytesToString();
+      var response = await request.send();
+      var responseData = await response.stream.bytesToString();
+      
+      if (response.statusCode == 200) {
         final json = jsonDecode(responseData);
         return json['url'];
       }
       throw Exception('Failed to upload media');
+    } catch (e) {
+      throw Exception('Error: $e');
+    }
+  }
+
+  // Clear all messages
+  Future<void> clearMessages() async {
+    try {
+      final response = await http.delete(Uri.parse('$baseUrl/messages'));
+      if (response.statusCode != 200) {
+        throw Exception('Failed to clear messages');
+      }
     } catch (e) {
       throw Exception('Error: $e');
     }

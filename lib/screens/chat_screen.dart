@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
-import '../providers/chat_provider.dart';
+import '../providers/bot_chat_provider.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/chat_input.dart';
 import '../widgets/typing_indicator.dart';
@@ -9,7 +9,12 @@ import '../models/message.dart';
 import '../models/quick_reply.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  final String title;
+
+  const ChatScreen({
+    super.key,
+    required this.title,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -17,13 +22,12 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final ScrollController _scrollController = ScrollController();
-  bool _isTyping = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().loadMessages();
+      context.read<BotChatProvider>().initialize();
     });
   }
 
@@ -40,15 +44,15 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _handleMediaSelected(PlatformFile file) async {
     if (file.bytes == null) return;
 
-    final chatProvider = context.read<ChatProvider>();
-    final url = await chatProvider.uploadMedia(file.bytes!, file.name);
+    final chatProvider = context.read<BotChatProvider>();
+    final url = await chatProvider.handleMediaUpload(file.bytes!, file.name);
 
     if (url != null) {
       final type = file.name.toLowerCase().endsWith('.mp4')
           ? MessageType.video
           : MessageType.image;
       await chatProvider.sendMessage(
-        'Sent ${type == MessageType.video ? 'video' : 'image'}',
+        content: 'Sent ${type == MessageType.video ? 'video' : 'image'}',
         type: type,
         mediaUrl: url,
       );
@@ -56,55 +60,60 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _handleSendMessage(String content) async {
-    setState(() => _isTyping = true);
-    await context.read<ChatProvider>().sendMessage(content);
-    setState(() => _isTyping = false);
-    _scrollToBottom();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: const Column(
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () => Scaffold.of(context).openDrawer(),
+        ),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'RCS Chat',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              'Online',
-              style: TextStyle(
-                fontSize: 12,
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: const BoxDecoration(
                 color: Colors.green,
+                shape: BoxShape.circle,
               ),
             ),
+            Text(widget.title),
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              context.read<ChatProvider>().loadMessages();
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'clear') {
+                context.read<BotChatProvider>().clearMessages();
+              }
             },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'clear',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline),
+                    SizedBox(width: 8),
+                    Text('Clear Chat'),
+                  ],
+                ),
+              ),
+            ],
           ),
         ],
       ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: Consumer<ChatProvider>(
+      body: Column(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+              ),
+              child: Consumer<BotChatProvider>(
                 builder: (context, chatProvider, child) {
-                  if (chatProvider.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
                   return Stack(
                     children: [
                       ListView.builder(
@@ -112,61 +121,49 @@ class _ChatScreenState extends State<ChatScreen> {
                         padding: const EdgeInsets.all(8.0),
                         itemCount: chatProvider.messages.length,
                         itemBuilder: (context, index) {
-                          return MessageBubble(
-                            message: chatProvider.messages[index],
-                            onQuickReplySelected: (dynamic reply) {
-                              if (reply is QuickReply) {
-                                chatProvider.handleQuickReply(reply);
-                                _scrollToBottom();
-                              }
-                            },
+                          final message = chatProvider.messages[index];
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 8.0),
+                            child: MessageBubble(
+                              message: message,
+                              onQuickReplySelected: (dynamic reply) {
+                                if (reply is QuickReply) {
+                                  chatProvider.handleQuickReply(reply);
+                                  _scrollToBottom();
+                                }
+                              },
+                            ),
                           );
                         },
                       ),
-                      if (_isTyping)
-                        Positioned(
+                      if (chatProvider.isTyping)
+                        const Positioned(
                           bottom: 0,
                           left: 0,
-                          child: Row(
-                            children: [
-                              const CircleAvatar(
-                                backgroundColor: Colors.deepPurple,
-                                radius: 16,
-                                child: Icon(Icons.android,
-                                    color: Colors.white, size: 20),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 16, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: const TypingIndicator(),
-                              ),
-                            ],
-                          ),
+                          right: 0,
+                          child: TypingIndicator(),
                         ),
                     ],
                   );
                 },
               ),
             ),
-            ChatInput(
-              onSendMessage: _handleSendMessage,
-              onMediaSelected: _handleMediaSelected,
-            ),
-          ],
-        ),
+          ),
+          ChatInput(
+            onSendMessage: (String content) async {
+              await context.read<BotChatProvider>().sendMessage(content: content);
+              _scrollToBottom();
+            },
+            onMediaSelected: _handleMediaSelected,
+          ),
+        ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'quick_reply.dart';
 
 enum MessageType {
@@ -20,7 +21,7 @@ class Message {
   Message({
     required this.id,
     required this.content,
-    required this.type,
+    this.type = MessageType.text,  // Make type parameter optional with default value
     this.quickReplies,
     this.mediaUrl,
     this.thumbnailUrl,

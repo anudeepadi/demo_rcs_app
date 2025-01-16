@@ -13,6 +13,8 @@ class QuickReplyButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).primaryColor;
+    
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -21,9 +23,9 @@ class QuickReplyButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: Theme.of(context).primaryColor.withOpacity(0.1),
+            color: primaryColor.withOpacity(0.1),
             border: Border.all(
-              color: Theme.of(context).primaryColor,
+              color: primaryColor,
               width: 1,
             ),
             borderRadius: BorderRadius.circular(20),
@@ -31,7 +33,7 @@ class QuickReplyButton extends StatelessWidget {
           child: Text(
             reply.text,
             style: TextStyle(
-              color: Theme.of(context).primaryColor,
+              color: primaryColor,
               fontWeight: FontWeight.w500,
             ),
           ),
