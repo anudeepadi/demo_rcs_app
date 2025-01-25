@@ -1,174 +1,170 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:path/path.dart' as path;
-import '../models/chat_message.dart';
 import '../providers/chat_provider.dart';
-import '../widgets/media_message.dart';
+import '../providers/bot_chat_provider.dart';
+import '../widgets/chat_bubble.dart';
+import '../widgets/quick_reply_bar.dart';
+import '../widgets/suggestion_bar.dart';
+import '../widgets/chat_input.dart';
+import '../models/quick_reply.dart';
+import '../services/link_preview_service.dart';
+import '../services/gif_service.dart';
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({Key? key}) : super(key: key);
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final LinkPreviewService _linkPreviewService = LinkPreviewService();
+  final GifService _gifService = GifService();
+  bool _isTyping = false;
 
   @override
-  void dispose() {
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _initializeChat();
   }
 
-  Future<void> _pickMedia() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.media,
-      allowMultiple: false,
-    );
-
-    if (result == null || result.files.isEmpty) return;
-
-    final file = result.files.first;
-    final extension = path.extension(file.name).toLowerCase();
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-
-    if (['.jpg', '.jpeg', '.png'].contains(extension)) {
-      chatProvider.sendImage(
-        file.path!,
-        thumbnailUrl: file.path,
-      );
-    } else if (['.mp4', '.mov', '.avi'].contains(extension)) {
-      await chatProvider.sendVideo(file.path!);
-    } else if (extension == '.gif') {
-      chatProvider.sendGif(file.path!);
-    } else {
-      chatProvider.sendFile(
-        file.path!,
-        file.name,
-        '${(file.size / 1024).round()} KB',
-      );
-    }
-    
-    _scrollToBottom();
-  }
-
-  void _sendMessage() {
-    if (_messageController.text.trim().isEmpty) return;
-    
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    chatProvider.sendMessage(_messageController.text.trim());
-    _messageController.clear();
-    
-    _scrollToBottom();
+  Future<void> _initializeChat() async {
+    final botProvider = Provider.of<BotChatProvider>(context, listen: false);
+    await Future.delayed(const Duration(milliseconds: 500));
+    botProvider.setWelcomeMessage();
   }
 
   void _scrollToBottom() {
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOut,
-        );
-      }
-    });
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
-  Widget _buildChannelSelector(BuildContext context, ChatProvider chatProvider) {
-    return DropdownButton<String>(
-      value: chatProvider.currentChannelId,
-      items: chatProvider.channels.map((channelId) {
-        return DropdownMenuItem(
-          value: channelId,
-          child: Text('Channel $channelId'),
-        );
-      }).toList(),
-      onChanged: (value) {
-        if (value != null) {
-          chatProvider.switchChannel(value);
-        }
-      },
-    );
+  Future<void> _handleMessageSubmit(String message) async {
+    if (message.trim().isEmpty) return;
+
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    final botProvider = Provider.of<BotChatProvider>(context, listen: false);
+
+    // Add user message
+    chatProvider.addTextMessage(message);
+    _scrollToBottom();
+
+    // Check for link preview
+    if (_linkPreviewService.isValidUrl(message)) {
+      setState(() => _isTyping = true);
+      final preview = await _linkPreviewService.fetchLinkPreview(message);
+      if (preview != null) {
+        chatProvider.addLinkPreviewMessage(preview);
+      }
+    }
+
+    // Simulate bot typing
+    setState(() => _isTyping = true);
+    await Future.delayed(const Duration(seconds: 1));
+
+    // Bot response with quick replies
+    final response = await botProvider.generateResponse(message);
+    chatProvider.addBotMessage(response);
+    
+    setState(() => _isTyping = false);
+    _scrollToBottom();
+
+    // Add quick reply suggestions
+    if (response.suggestedReplies?.isNotEmpty ?? false) {
+      botProvider.setSuggestions(response.suggestedReplies!);
+    }
+  }
+
+  Future<void> _handleGifSelected(String gifUrl) async {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    chatProvider.addGifMessage(gifUrl);
+    _scrollToBottom();
+  }
+
+  void _handleQuickReplySelected(QuickReply reply) {
+    _handleMessageSubmit(reply.text);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Consumer<ChatProvider>(
-          builder: (context, chatProvider, child) {
-            return _buildChannelSelector(context, chatProvider);
-          },
-        ),
+        title: const Text('RCS Demo Chat'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.more_vert),
             onPressed: () {
-              final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-              final newChannelId = 'channel_${chatProvider.channels.length + 1}';
-              chatProvider.switchChannel(newChannelId);
+              // TODO: Show more options
             },
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: Consumer<ChatProvider>(
-              builder: (context, chatProvider, child) {
-                final messages = chatProvider.currentMessages;
-                return ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.all(8.0),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final message = messages[index];
-                    return MessageBubble(message: message);
-                  },
-                );
-              },
+      body: SafeArea(
+        child: Column(
+          children: [
+            const SuggestionBar(),
+            Expanded(
+              child: Consumer<ChatProvider>(
+                builder: (context, chatProvider, _) {
+                  return ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(8.0),
+                    itemCount: chatProvider.messages.length + (_isTyping ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index == chatProvider.messages.length && _isTyping) {
+                        return const TypingIndicator();
+                      }
+                      final message = chatProvider.messages[index];
+                      return ChatBubble(
+                        message: message,
+                        onQuickReplySelected: _handleQuickReplySelected,
+                      );
+                    },
+                  );
+                },
+              ),
             ),
-          ),
+            const QuickReplyBar(),
+            ChatInput(
+              onMessageSubmit: _handleMessageSubmit,
+              onGifSelected: _handleGifSelected,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class TypingIndicator extends StatelessWidget {
+  const TypingIndicator({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Container(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 4,
-                  offset: const Offset(0, -2),
-                ),
-              ],
+              color: Theme.of(context).colorScheme.surfaceVariant,
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
-              children: [
-                IconButton(
-                  onPressed: _pickMedia,
-                  icon: const Icon(Icons.attach_file),
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    decoration: const InputDecoration(
-                      hintText: 'Type a message...',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  onPressed: _sendMessage,
-                  icon: const Icon(Icons.send),
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ],
+              children: List.generate(3, (index) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: AnimatedDot(delay: index * 300),
+                );
+              }),
             ),
           ),
         ],
@@ -177,50 +173,57 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-class MessageBubble extends StatelessWidget {
-  final ChatMessage message;
+class AnimatedDot extends StatefulWidget {
+  final int delay;
 
-  const MessageBubble({
-    super.key,
-    required this.message,
-  });
+  const AnimatedDot({Key? key, required this.delay}) : super(key: key);
+
+  @override
+  State<AnimatedDot> createState() => _AnimatedDotState();
+}
+
+class _AnimatedDotState extends State<AnimatedDot>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) {
+        _controller.repeat(reverse: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final isUser = message.isUser;
-    return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          color: isUser 
-            ? Theme.of(context).colorScheme.primary
-            : Theme.of(context).colorScheme.secondary.withOpacity(0.3),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          crossAxisAlignment: isUser 
-            ? CrossAxisAlignment.end 
-            : CrossAxisAlignment.start,
-          children: [
-            if (message.type != MessageType.text)
-              MediaMessage(message: message),
-            if (message.text.isNotEmpty)
-              Text(
-                message.text,
-                style: TextStyle(
-                  color: isUser 
-                    ? Theme.of(context).colorScheme.onPrimary
-                    : Theme.of(context).colorScheme.onBackground,
-                ),
-              ),
-          ],
-        ),
-      ),
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: Theme.of(context)
+                .colorScheme
+                .primary
+                .withOpacity(0.4 + (_controller.value * 0.6)),
+            shape: BoxShape.circle,
+          ),
+        );
+      },
     );
   }
 }

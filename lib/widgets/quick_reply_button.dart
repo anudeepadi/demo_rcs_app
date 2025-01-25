@@ -2,41 +2,45 @@ import 'package:flutter/material.dart';
 import '../models/quick_reply.dart';
 
 class QuickReplyButton extends StatelessWidget {
-  final QuickReply reply;
-  final Function(dynamic) onTap;
+  final QuickReply quickReply;
+  final VoidCallback onPressed;
 
   const QuickReplyButton({
-    super.key,
-    required this.reply,
-    required this.onTap,
-  });
+    Key? key,
+    required this.quickReply,
+    required this.onPressed,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final primaryColor = Theme.of(context).primaryColor;
-    
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => onTap(reply),
-        borderRadius: BorderRadius.circular(20),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: primaryColor.withOpacity(0.1),
-            border: Border.all(
-              color: primaryColor,
-              width: 1,
-            ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Text(
-            reply.text,
-            style: TextStyle(
-              color: primaryColor,
-              fontWeight: FontWeight.w500,
-            ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
           ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (quickReply.icon != null) ...[
+              Icon(
+                IconData(
+                  int.parse(quickReply.icon!),
+                  fontFamily: 'MaterialIcons',
+                ),
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+            ],
+            Text(quickReply.text),
+          ],
         ),
       ),
     );

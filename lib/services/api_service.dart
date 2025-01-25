@@ -1,70 +1,39 @@
-import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/quick_reply.dart';
 
-class ApiResponse {
-  final String content;
-  final List<QuickReply>? quickReplies;
-
-  const ApiResponse({
-    required this.content,
-    this.quickReplies,
-  });
-
-  factory ApiResponse.fromJson(Map<String, dynamic> json) {
-    return ApiResponse(
-      content: json['content'] as String,
-      quickReplies: (json['quickReplies'] as List?)
-          ?.map((e) => QuickReply.fromJson(e as Map<String, dynamic>))
-          .toList(),
-    );
-  }
-}
-
 class ApiService {
-  static const String baseUrl = 'http://localhost:3000/api';
+  static const String baseUrl = 'https://api.example.com'; // Replace with your API URL
 
-  Future<ApiResponse> getBotResponse(String message) async {
+  Future<List<QuickReply>> fetchSuggestions() async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/chat'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode({'message': message}),
-      );
-
+      final response = await http.get(Uri.parse('$baseUrl/suggestions'));
+      
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return ApiResponse.fromJson(data);
-      } else {
-        throw Exception('Failed to get bot response');
+        final List<dynamic> data = json.decode(response.body);
+        return data.map((json) => QuickReply(
+          text: json['text'],
+          postbackData: json['postbackData'],
+          icon: json['icon'],
+        )).toList();
       }
+      
+      return [];
     } catch (e) {
-      throw Exception('Error communicating with the server: $e');
+      print('Error fetching suggestions: $e');
+      return [];
     }
   }
 
-  Future<String> uploadMedia(String filePath) async {
+  Future<void> sendMessage(String message) async {
     try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl/upload'),
+      await http.post(
+        Uri.parse('$baseUrl/messages'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'message': message}),
       );
-
-      request.files.add(
-        await http.MultipartFile.fromPath('file', filePath),
-      );
-
-      final response = await request.send();
-      final responseData = await response.stream.bytesToString();
-
-      if (response.statusCode == 200) {
-        final data = json.decode(responseData);
-        return data['url'];
-      } else {
-        throw Exception('Failed to upload media');
-      }
     } catch (e) {
-      throw Exception('Error uploading media: $e');
+      print('Error sending message: $e');
     }
   }
 }

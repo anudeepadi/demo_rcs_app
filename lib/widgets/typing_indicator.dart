@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:math' show sin, pi;
 
 class TypingIndicator extends StatefulWidget {
-  const TypingIndicator({super.key});
+  const TypingIndicator({Key? key}) : super(key: key);
 
   @override
   State<TypingIndicator> createState() => _TypingIndicatorState();
@@ -11,6 +10,7 @@ class TypingIndicator extends StatefulWidget {
 class _TypingIndicatorState extends State<TypingIndicator>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+  late List<Animation<double>> _animations;
 
   @override
   void initState() {
@@ -19,6 +19,15 @@ class _TypingIndicatorState extends State<TypingIndicator>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat();
+
+    _animations = List.generate(3, (index) {
+      return Tween<double>(begin: 0, end: 1).animate(
+        CurvedAnimation(
+          parent: _controller,
+          curve: Interval(index * 0.2, 0.6 + index * 0.2, curve: Curves.easeOut),
+        ),
+      );
+    });
   }
 
   @override
@@ -27,64 +36,38 @@ class _TypingIndicatorState extends State<TypingIndicator>
     super.dispose();
   }
 
-  Widget _buildDot(double delay) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        final progress = (_controller.value + delay) % 1.0;
-        final y = sin(progress * pi) * 5;
-        return Transform.translate(
-          offset: Offset(0, -y),
-          child: child,
-        );
-      },
-      child: Container(
-        width: 8,
-        height: 8,
-        margin: const EdgeInsets.symmetric(horizontal: 2),
-        decoration: BoxDecoration(
-          color: Colors.grey[600],
-          shape: BoxShape.circle,
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 4, left: 40),
-      child: Row(
-        children: [
-          const CircleAvatar(
-            backgroundColor: Colors.deepPurple,
-            radius: 16,
-            child: Icon(Icons.android, color: Colors.white, size: 20),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _buildDot(0),
-                _buildDot(0.2),
-                _buildDot(0.4),
-              ],
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(3, (index) {
+            return AnimatedBuilder(
+              animation: _animations[index],
+              builder: (context, child) {
+                return Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.grey.shade600.withOpacity(
+                      0.4 + (_animations[index].value * 0.6),
+                    ),
+                  ),
+                );
+              },
+            );
+          }),
+        ),
       ),
     );
   }

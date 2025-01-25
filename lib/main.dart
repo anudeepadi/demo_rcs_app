@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/chat_provider.dart';
-import 'providers/server_provider.dart';
-import 'screens/home_screen.dart';
+import 'providers/bot_chat_provider.dart';
+import 'screens/chat_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -15,8 +15,8 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ServerProvider()),
         ChangeNotifierProvider(create: (_) => ChatProvider()),
+        ChangeNotifierProvider(create: (_) => BotChatProvider()),
       ],
       child: MaterialApp(
         title: 'RCS Demo App',
@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
         theme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.deepPurple,
+            seedColor: Colors.blue,
             brightness: Brightness.light,
           ),
           appBarTheme: const AppBarTheme(
@@ -35,7 +35,7 @@ class MyApp extends StatelessWidget {
         darkTheme: ThemeData(
           useMaterial3: true,
           colorScheme: ColorScheme.fromSeed(
-            seedColor: Colors.deepPurple,
+            seedColor: Colors.blue,
             brightness: Brightness.dark,
           ),
           appBarTheme: const AppBarTheme(
@@ -43,7 +43,7 @@ class MyApp extends StatelessWidget {
             elevation: 2,
           ),
         ),
-        home: const HomeScreen(),
+        home: const ChatScreen(),
       ),
     );
   }

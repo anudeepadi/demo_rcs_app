@@ -1,54 +1,50 @@
 import 'package:flutter/material.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import '../models/chat_message.dart';
-import '../screens/video_player_screen.dart';
 
 class MediaMessage extends StatefulWidget {
   final ChatMessage message;
-  final double maxWidth;
 
   const MediaMessage({
-    super.key,
+    Key? key,
     required this.message,
-    this.maxWidth = 250,
-  });
+  }) : super(key: key);
 
   @override
   State<MediaMessage> createState() => _MediaMessageState();
 }
 
 class _MediaMessageState extends State<MediaMessage> {
-  ChewieController? _chewieController;
   VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
 
   @override
   void initState() {
     super.initState();
     if (widget.message.type == MessageType.video) {
-      _initializeVideo();
+      _initializeVideoPlayer();
     }
   }
 
-  Future<void> _initializeVideo() async {
-    if (widget.message.mediaUrl == null) return;
-    
-    _videoPlayerController = VideoPlayerController.networkUrl(
-      Uri.parse(widget.message.mediaUrl!),
+  Future<void> _initializeVideoPlayer() async {
+    _videoPlayerController = VideoPlayerController.network(
+      widget.message.mediaUrl!,
     );
 
     await _videoPlayerController!.initialize();
-    
+
     _chewieController = ChewieController(
       videoPlayerController: _videoPlayerController!,
       aspectRatio: _videoPlayerController!.value.aspectRatio,
       autoPlay: false,
       looping: false,
-      showControls: true,
       placeholder: widget.message.thumbnailUrl != null
-          ? Image.network(widget.message.thumbnailUrl!)
-          : const Center(child: CircularProgressIndicator()),
+          ? Image.network(
+              widget.message.thumbnailUrl!,
+              fit: BoxFit.cover,
+            )
+          : null,
     );
 
     if (mounted) setState(() {});
@@ -56,139 +52,98 @@ class _MediaMessageState extends State<MediaMessage> {
 
   @override
   void dispose() {
-    _chewieController?.dispose();
     _videoPlayerController?.dispose();
+    _chewieController?.dispose();
     super.dispose();
   }
 
   Widget _buildImage() {
     return GestureDetector(
       onTap: () {
-        // Add image viewer here
+        // TODO: Implement image preview
       },
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: CachedNetworkImage(
-          imageUrl: widget.message.mediaUrl!,
-          placeholder: (context, url) => Container(
-            width: widget.maxWidth,
-            height: 150,
-            color: Colors.grey[300],
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
-          errorWidget: (context, url, error) => Container(
-            width: widget.maxWidth,
-            height: 150,
-            color: Colors.grey[300],
-            child: const Icon(Icons.error),
-          ),
-          width: widget.maxWidth,
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          widget.message.mediaUrl!,
           fit: BoxFit.cover,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            return Container(
+              width: double.infinity,
+              height: 200,
+              color: Colors.grey.shade200,
+              child: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          },
+          errorBuilder: (context, error, stackTrace) {
+            return Container(
+              width: double.infinity,
+              height: 200,
+              color: Colors.grey.shade200,
+              child: const Center(
+                child: Icon(Icons.error),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
   Widget _buildVideo() {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => VideoPlayerScreen(
-              videoUrl: widget.message.mediaUrl!,
-              thumbnailUrl: widget.message.thumbnailUrl,
-            ),
-          ),
-        );
-      },
-      child: Container(
-        width: widget.maxWidth,
-        height: 150,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(8),
-          color: Colors.black,
+    if (_chewieController == null) {
+      return Container(
+        width: double.infinity,
+        height: 200,
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: CircularProgressIndicator(),
         ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (widget.message.thumbnailUrl != null)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  widget.message.thumbnailUrl!,
-                  width: widget.maxWidth,
-                  height: 150,
-                  fit: BoxFit.cover,
-                ),
-              ),
-            const Icon(
-              Icons.play_circle_fill,
-              size: 48,
-              color: Colors.white,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+      );
+    }
 
-  Widget _buildGif() {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: CachedNetworkImage(
-        imageUrl: widget.message.mediaUrl!,
-        placeholder: (context, url) => Container(
-          width: widget.maxWidth,
-          height: 150,
-          color: Colors.grey[300],
-          child: const Center(
-            child: CircularProgressIndicator(),
-          ),
-        ),
-        errorWidget: (context, url, error) => Container(
-          width: widget.maxWidth,
-          height: 150,
-          color: Colors.grey[300],
-          child: const Icon(Icons.error),
-        ),
-        width: widget.maxWidth,
-        fit: BoxFit.cover,
-      ),
+      borderRadius: BorderRadius.circular(12),
+      child: Chewie(controller: _chewieController!),
     );
   }
 
   Widget _buildFile() {
     return Container(
-      width: widget.maxWidth,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: Colors.grey[200],
-      ),
+      padding: const EdgeInsets.all(12),
       child: Row(
         children: [
-          const Icon(Icons.file_present),
-          const SizedBox(width: 8),
+          const Icon(Icons.insert_drive_file, size: 40),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  widget.message.fileName ?? 'File',
+                  widget.message.fileName ?? 'Unknown file',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (widget.message.fileSize != null)
                   Text(
-                    widget.message.fileSize!,
-                    style: const TextStyle(fontSize: 12),
+                    '${(widget.message.fileSize! / 1024).toStringAsFixed(1)} KB',
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
                   ),
               ],
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: () {
+              // TODO: Implement file download
+            },
           ),
         ],
       ),
@@ -202,8 +157,6 @@ class _MediaMessageState extends State<MediaMessage> {
         return _buildImage();
       case MessageType.video:
         return _buildVideo();
-      case MessageType.gif:
-        return _buildGif();
       case MessageType.file:
         return _buildFile();
       default:

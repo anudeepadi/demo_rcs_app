@@ -1,98 +1,146 @@
 import 'package:flutter/material.dart';
 import '../models/chat_message.dart';
-import '../widgets/media_message.dart';
-import '../widgets/bot_suggestions.dart';
+import '../models/quick_reply.dart';
+import 'media_message.dart';
 
 class MessageBubble extends StatelessWidget {
   final ChatMessage message;
-  final bool showSuggestions;
 
   const MessageBubble({
-    super.key,
+    Key? key,
     required this.message,
-    this.showSuggestions = false,
-  });
+  }) : super(key: key);
 
-  bool _isValidUrl(String text) {
-    Uri? uri = Uri.tryParse(text);
-    return uri != null && 
-           (uri.scheme == 'http' || uri.scheme == 'https') && 
-           uri.host.isNotEmpty;
+  Widget _buildLinkPreview() {
+    if (message.linkPreview == null) return const SizedBox.shrink();
+    
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (message.linkPreview?.imageUrl != null)
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              child: Image.network(
+                message.linkPreview!.imageUrl!,
+                fit: BoxFit.cover,
+                width: double.infinity,
+                height: 150,
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (message.linkPreview?.title != null)
+                  Text(
+                    message.linkPreview!.title!,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                if (message.linkPreview?.description != null)
+                  Text(
+                    message.linkPreview!.description!,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                if (message.linkPreview?.siteName != null)
+                  Text(
+                    message.linkPreview!.siteName!,
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 11,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickReplies() {
+    if (message.suggestedReplies == null || message.suggestedReplies!.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      height: 40,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: message.suggestedReplies!.length,
+        itemBuilder: (context, index) {
+          final reply = message.suggestedReplies![index];
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: ElevatedButton(
+              onPressed: () {
+                // TODO: Handle quick reply selection
+              },
+              style: ElevatedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              child: Text(reply.text),
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isUser = message.isUser;
-    final hasMedia = message.type != MessageType.text;
-    final isUrl = !hasMedia && _isValidUrl(message.text);
-    
     return Align(
-      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: EdgeInsets.only(
-          left: isUser ? 50 : 8,
-          right: isUser ? 8 : 50,
-          top: 4,
-          bottom: showSuggestions ? 16 : 4,
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.75,
+        ),
+        decoration: BoxDecoration(
+          color: message.isUser
+              ? Theme.of(context).colorScheme.primary
+              : Theme.of(context).colorScheme.secondary,
+          borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
-          crossAxisAlignment: isUser 
-            ? CrossAxisAlignment.end 
-            : CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              decoration: BoxDecoration(
-                color: isUser 
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.secondary.withOpacity(0.3),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (hasMedia)
-                    MediaMessage(message: message),
-                  if (isUrl)
-                    Column(
-                      children: [
-                        Text(
-                          message.text,
-                          style: TextStyle(
-                            color: isUser 
-                              ? Theme.of(context).colorScheme.onPrimary
-                              : Theme.of(context).colorScheme.onBackground,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          height: 150,
-                          width: 250,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[300],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Center(
-                            child: Icon(Icons.link),
-                          ),
-                        ),
-                      ],
-                    )
-                  else if (message.text.isNotEmpty)
-                    Text(
-                      message.text,
-                      style: TextStyle(
-                        color: isUser 
-                          ? Theme.of(context).colorScheme.onPrimary
-                          : Theme.of(context).colorScheme.onBackground,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (showSuggestions)
-              const BotSuggestions(),
+            if (message.type == MessageType.text)
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  message.content,
+                  style: TextStyle(
+                    color: message.isUser ? Colors.white : Colors.black,
+                  ),
+                ),
+              )
+            else if (message.type == MessageType.image ||
+                     message.type == MessageType.video ||
+                     message.type == MessageType.file)
+              MediaMessage(message: message)
+            else if (message.type == MessageType.linkPreview)
+              _buildLinkPreview()
+            else if (message.type == MessageType.quickReplies)
+              _buildQuickReplies(),
           ],
         ),
       ),
