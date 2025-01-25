@@ -1,97 +1,40 @@
-import 'package:flutter/material.dart';
-import '../models/message.dart';
+import 'package:flutter/foundation.dart';
+import '../models/chat_message.dart';
 import '../models/quick_reply.dart';
-import '../services/api_service.dart';
 
 class BotChatProvider with ChangeNotifier {
-  final List<Message> _messages = [];
-  final ApiService _apiService = ApiService();
-  bool _isTyping = false;
+  final List<QuickReply> _defaultQuickReplies = [
+    QuickReply(
+      id: 'help',
+      text: 'Help',
+      postbackData: 'help',
+    ),
+    QuickReply(
+      id: 'status',
+      text: 'Check Status',
+      postbackData: 'status',
+    ),
+    QuickReply(
+      id: 'menu',
+      text: 'Show Menu',
+      postbackData: 'menu',
+    ),
+  ];
 
-  List<Message> get messages => List.unmodifiable(_messages);
-  bool get isTyping => _isTyping;
+  List<QuickReply> get defaultQuickReplies => _defaultQuickReplies;
 
-  Future<void> initialize() async {
-    // Add initial bot message
-    _addMessage(
-      Message(
-        id: DateTime.now().toString(),
-        content: 'Hello! How can I help you today?',
-        isMe: false,
-        timestamp: DateTime.now(),
-        channelId: 'default',
-        serverId: 'default',
-        quickReplies: const [
-          QuickReply(text: 'Help'),
-          QuickReply(text: 'Features'),
-          QuickReply(text: 'About'),
-        ],
-      ),
-    );
-  }
-
-  Future<void> sendMessage(String content, {String? mediaUrl}) async {
-    if (content.trim().isEmpty) return;
-
-    // Add user message
-    _addMessage(
-      Message(
-        id: DateTime.now().toString(),
-        content: content,
-        isMe: true,
-        timestamp: DateTime.now(),
-        channelId: 'default',
-        serverId: 'default',
-      ),
-    );
-
-    // Show typing indicator
-    _setTyping(true);
-
-    try {
-      // Get bot response
-      final response = await _apiService.getBotResponse(content);
-      
-      // Add bot message
-      _addMessage(
-        Message(
-          id: DateTime.now().toString(),
-          content: response.content,
-          isMe: false,
-          timestamp: DateTime.now(),
-          channelId: 'default',
-          serverId: 'default',
-          quickReplies: response.quickReplies,
-        ),
-      );
-    } catch (e) {
-      debugPrint('Error getting bot response: $e');
-      _addMessage(
-        Message(
-          id: DateTime.now().toString(),
-          content: 'Sorry, I encountered an error. Please try again.',
-          isMe: false,
-          timestamp: DateTime.now(),
-          channelId: 'default',
-          serverId: 'default',
-        ),
-      );
-    } finally {
-      _setTyping(false);
+  Future<void> processQuickReply(QuickReply quickReply) async {
+    // Implement quick reply processing logic here
+    switch (quickReply.postbackData) {
+      case 'help':
+        // Handle help request
+        break;
+      case 'status':
+        // Handle status check
+        break;
+      case 'menu':
+        // Handle menu request
+        break;
     }
-  }
-
-  Future<void> handleQuickReply(QuickReply reply) async {
-    await sendMessage(reply.text);
-  }
-
-  void _addMessage(Message message) {
-    _messages.add(message);
-    notifyListeners();
-  }
-
-  void _setTyping(bool typing) {
-    _isTyping = typing;
-    notifyListeners();
   }
 }

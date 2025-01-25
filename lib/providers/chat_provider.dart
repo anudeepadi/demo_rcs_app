@@ -1,156 +1,166 @@
-import 'dart:convert';
-import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
+import 'package:video_compress/video_compress.dart';
 import 'package:path/path.dart' as path;
-import '../models/message.dart';
-import '../services/media_service.dart';
+import '../models/chat_message.dart';
+import '../models/quick_reply.dart';
 
 class ChatProvider with ChangeNotifier {
-  final Map<String, List<Message>> _channelMessages = {};
-  final MediaService _mediaService = MediaService();
-  bool _isLoading = false;
-  bool _isTyping = false;
+  final Map<String, List<ChatMessage>> _channelMessages = {};
+  String _currentChannelId = 'default';
+  String _currentServerId = '';
   
-  static const String _storageKey = 'chat_messages';
+  List<ChatMessage> get currentMessages => _channelMessages[_currentChannelId] ?? [];
+  String get currentChannelId => _currentChannelId;
+  String get currentServerId => _currentServerId;
+  List<String> get channels => _channelMessages.keys.toList();
 
-  bool get isLoading => _isLoading;
-  bool get isTyping => _isTyping;
-
-  ChatProvider() {
-    _loadStoredMessages();
-  }
-
-  Future<MediaAttachment?> uploadMedia(String filePath) async {
-    try {
-      final url = await _mediaService.uploadMedia(filePath);
-      if (url == null) return null;
-
-      // Create MediaAttachment with local file information
-      return MediaAttachment(
-        url: url,
-        mimeType: path.extension(filePath).toLowerCase(),
-      );
-    } catch (e) {
-      debugPrint('Error uploading media: $e');
-      return null;
-    }
-  }
-
-  List<Message> getMessagesForChannel(String channelId) {
-    return List.unmodifiable(_channelMessages[channelId] ?? []);
-  }
-
-  Future<void> _loadStoredMessages() async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final storedMessages = prefs.getString(_storageKey);
-      
-      if (storedMessages != null) {
-        final decodedMessages = json.decode(storedMessages) as Map<String, dynamic>;
-        decodedMessages.forEach((channelId, messages) {
-          _channelMessages[channelId] = (messages as List)
-              .map((m) => Message.fromJson(m as Map<String, dynamic>))
-              .toList();
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading stored messages: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> _storeMessages() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final encodedMessages = json.encode(_channelMessages.map(
-        (key, value) => MapEntry(key, value.map((m) => m.toJson()).toList()),
-      ));
-      await prefs.setString(_storageKey, encodedMessages);
-    } catch (e) {
-      debugPrint('Error storing messages: $e');
-    }
-  }
-
-  Future<void> loadMessages({String? channelId}) async {
-    if (channelId != null && !_channelMessages.containsKey(channelId)) {
+  Future<void> loadMessages(String channelId, String serverId) async {
+    _currentChannelId = channelId;
+    _currentServerId = serverId;
+    if (!_channelMessages.containsKey(channelId)) {
       _channelMessages[channelId] = [];
-      
-      // Add welcome message for new channels
-      _addMessage(Message(
-        id: DateTime.now().toString(),
-        content: 'Welcome to the channel! You are in offline mode.',
-        channelId: channelId,
-        serverId: 'system',
-        isMe: false,
-        timestamp: DateTime.now(),
-        senderName: 'System',
-      ));
     }
+    notifyListeners();
   }
 
-  void _addMessage(Message message) {
+  List<ChatMessage> getMessagesForChannel(String channelId) {
+    return _channelMessages[channelId] ?? [];
+  }
+
+  void switchChannel(String channelId) {
+    _currentChannelId = channelId;
+    if (!_channelMessages.containsKey(channelId)) {
+      _channelMessages[channelId] = [];
+    }
+    notifyListeners();
+  }
+
+  void sendMessage(String text, {String? channelId, String? serverId}) {
+    final targetChannel = channelId ?? _currentChannelId;
+    final message = ChatMessage(
+      text: text,
+      timestamp: DateTime.now(),
+      isUser: true,
+      type: MessageType.text,
+      channelId: targetChannel,
+    );
+    _addMessage(message);
+
+    // Generate bot response
+    _generateBotResponse(text);
+  }
+
+  Future<void> sendImage(String imagePath, {String? thumbnailUrl}) async {
+    final message = ChatMessage(
+      text: '',
+      timestamp: DateTime.now(),
+      isUser: true,
+      type: MessageType.image,
+      mediaUrl: imagePath,
+      thumbnailUrl: thumbnailUrl,
+      channelId: _currentChannelId,
+    );
+    _addMessage(message);
+  }
+
+  Future<void> sendVideo(String videoPath) async {
+    // Generate thumbnail
+    final thumbnailFile = await VideoCompress.getFileThumbnail(
+      videoPath,
+      quality: 50,
+      position: -1,
+    );
+
+    final message = ChatMessage(
+      text: '',
+      timestamp: DateTime.now(),
+      isUser: true,
+      type: MessageType.video,
+      mediaUrl: videoPath,
+      thumbnailUrl: thumbnailFile.path,
+      fileName: path.basename(videoPath),
+      channelId: _currentChannelId,
+    );
+    _addMessage(message);
+  }
+
+  void sendGif(String gifPath) {
+    final message = ChatMessage(
+      text: '',
+      timestamp: DateTime.now(),
+      isUser: true,
+      type: MessageType.gif,
+      mediaUrl: gifPath,
+      channelId: _currentChannelId,
+    );
+    _addMessage(message);
+  }
+
+  void sendFile(String filePath, String fileName, String fileSize) {
+    final message = ChatMessage(
+      text: '',
+      timestamp: DateTime.now(),
+      isUser: true,
+      type: MessageType.file,
+      mediaUrl: filePath,
+      fileName: fileName,
+      fileSize: fileSize,
+      channelId: _currentChannelId,
+    );
+    _addMessage(message);
+  }
+
+  Future<void> handleQuickReply(QuickReply quickReply) async {
+    sendMessage(quickReply.text);
+  }
+
+  void _addMessage(ChatMessage message) {
     if (!_channelMessages.containsKey(message.channelId)) {
       _channelMessages[message.channelId] = [];
     }
-    
     _channelMessages[message.channelId]!.add(message);
     notifyListeners();
-    _storeMessages();
   }
 
-  Future<void> sendMessage(
-    String content, {
-    required String channelId,
-    required String serverId,
-    MessageType type = MessageType.text,
-    MediaAttachment? mediaAttachment,
-  }) async {
-    if (content.trim().isEmpty && mediaAttachment == null) return;
-
-    final message = Message(
-      id: DateTime.now().toString(),
-      content: content,
-      channelId: channelId,
-      serverId: serverId,
-      isMe: true,
-      timestamp: DateTime.now(),
-      type: type,
-      mediaAttachment: mediaAttachment,
-      senderName: 'Me',
-    );
-
-    _addMessage(message);
-
-    // Simulate response in offline mode
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    if (content.toLowerCase().contains('hello') || content.toLowerCase().contains('hi')) {
-      _addMessage(Message(
-        id: DateTime.now().toString(),
-        content: 'Hello! How can I help you today?',
-        channelId: channelId,
-        serverId: serverId,
-        isMe: false,
-        timestamp: DateTime.now(),
-        senderName: 'Bot',
-      ));
-    }
-  }
-
-  Future<void> handleQuickReply(String text, String channelId, String serverId) async {
-    _isTyping = true;
-    notifyListeners();
-    
-    await sendMessage(text, channelId: channelId, serverId: serverId);
-    
+  Future<void> _generateBotResponse(String userMessage) async {
+    // Simulate typing delay
     await Future.delayed(const Duration(seconds: 1));
-    
-    _isTyping = false;
+
+    String response;
+    if (userMessage.toLowerCase().contains('hello') || 
+        userMessage.toLowerCase().contains('hi')) {
+      response = 'Hello! How can I help you today?';
+    } else if (userMessage.toLowerCase().contains('help')) {
+      response = 'I can help you with:\n- Sending messages\n- Sharing media\n- Getting information';
+    } else if (userMessage.toLowerCase().contains('feature')) {
+      response = 'Here are some features:\n- Rich media messaging\n- Quick replies\n- Link previews\n- Video thumbnails';
+    } else if (userMessage.toLowerCase().contains('about')) {
+      response = 'This is an RCS Demo App showcasing rich communication features.';
+    } else if (userMessage.toLowerCase().contains('yes')) {
+      response = 'Great! What would you like to know more about?';
+    } else if (userMessage.toLowerCase().contains('no')) {
+      response = 'No problem! Let me know if you need anything else.';
+    } else {
+      response = 'I understand. Would you like to know more about our features?';
+    }
+
+    final message = ChatMessage(
+      text: response,
+      timestamp: DateTime.now(),
+      isUser: false,
+      type: MessageType.text,
+      channelId: _currentChannelId,
+    );
+    _addMessage(message);
+  }
+
+  void clearChannel(String channelId) {
+    _channelMessages[channelId]?.clear();
+    notifyListeners();
+  }
+
+  void clearAllChannels() {
+    _channelMessages.clear();
     notifyListeners();
   }
 }

@@ -1,110 +1,101 @@
 import 'package:flutter/material.dart';
-import '../models/message.dart';
+import '../models/chat_message.dart';
+import '../widgets/media_message.dart';
+import '../widgets/bot_suggestions.dart';
 
 class MessageBubble extends StatelessWidget {
-  final Message message;
-  final bool isMe;
+  final ChatMessage message;
+  final bool showSuggestions;
 
   const MessageBubble({
     super.key,
     required this.message,
-    required this.isMe,
+    this.showSuggestions = false,
   });
+
+  bool _isValidUrl(String text) {
+    Uri? uri = Uri.tryParse(text);
+    return uri != null && 
+           (uri.scheme == 'http' || uri.scheme == 'https') && 
+           uri.host.isNotEmpty;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isUser = message.isUser;
+    final hasMedia = message.type != MessageType.text;
+    final isUrl = !hasMedia && _isValidUrl(message.text);
+    
     return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isMe
-              ? Theme.of(context).colorScheme.primaryContainer
-              : Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        margin: EdgeInsets.only(
+          left: isUser ? 50 : 8,
+          right: isUser ? 8 : 50,
+          top: 4,
+          bottom: showSuggestions ? 16 : 4,
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: isUser 
+            ? CrossAxisAlignment.end 
+            : CrossAxisAlignment.start,
           children: [
-            if (!isMe && message.senderName != null) ...[
-              Text(
-                message.senderName!,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+            Container(
+              decoration: BoxDecoration(
+                color: isUser 
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.secondary.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(16),
               ),
-              const SizedBox(height: 4),
-            ],
-            if (message.mediaAttachment != null) ...[
-              _buildMediaContent(context),
-              const SizedBox(height: 8),
-            ],
-            Text(message.content),
-            const SizedBox(height: 4),
-            Text(
-              _formatTimestamp(message.timestamp),
-              style: Theme.of(context).textTheme.bodySmall,
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (hasMedia)
+                    MediaMessage(message: message),
+                  if (isUrl)
+                    Column(
+                      children: [
+                        Text(
+                          message.text,
+                          style: TextStyle(
+                            color: isUser 
+                              ? Theme.of(context).colorScheme.onPrimary
+                              : Theme.of(context).colorScheme.onBackground,
+                            decoration: TextDecoration.underline,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          height: 150,
+                          width: 250,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.link),
+                          ),
+                        ),
+                      ],
+                    )
+                  else if (message.text.isNotEmpty)
+                    Text(
+                      message.text,
+                      style: TextStyle(
+                        color: isUser 
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : Theme.of(context).colorScheme.onBackground,
+                      ),
+                    ),
+                ],
+              ),
             ),
+            if (showSuggestions)
+              const BotSuggestions(),
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildMediaContent(BuildContext context) {
-    if (message.mediaAttachment == null) {
-      return const SizedBox.shrink();
-    }
-
-    switch (message.type) {
-      case MessageType.image:
-      case MessageType.gif:
-        return Image.network(
-          message.mediaAttachment!.url,
-          fit: BoxFit.contain,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Center(
-              child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                    : null,
-              ),
-            );
-          },
-        );
-      case MessageType.video:
-        // Video player component should be implemented here
-        return Container(
-          height: 200,
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: const Center(
-            child: Icon(Icons.video_library),
-          ),
-        );
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-
-  String _formatTimestamp(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inDays > 0) {
-      return '${difference.inDays}d ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours}h ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes}m ago';
-    } else {
-      return 'just now';
-    }
   }
 }

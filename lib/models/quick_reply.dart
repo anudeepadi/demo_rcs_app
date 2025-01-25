@@ -1,23 +1,31 @@
 class QuickReply {
+  final String id;
   final String text;
-  final String? payload;
+  final String? postbackData;
+  final String? imageUrl;
 
-  const QuickReply({
+  QuickReply({
+    required this.id,
     required this.text,
-    this.payload,
+    this.postbackData,
+    this.imageUrl,
   });
 
   factory QuickReply.fromJson(Map<String, dynamic> json) {
     return QuickReply(
+      id: json['id'] as String,
       text: json['text'] as String,
-      payload: json['payload'] as String?,
+      postbackData: json['postbackData'] as String?,
+      imageUrl: json['imageUrl'] as String?,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'text': text,
-      'payload': payload,
+      'postbackData': postbackData,
+      'imageUrl': imageUrl,
     };
   }
 }
