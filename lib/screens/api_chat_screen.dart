@@ -3,32 +3,38 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../providers/chat_provider.dart';
 import '../widgets/message_bubble.dart';
-import '../widgets/chat_input.dart';
-import '../widgets/typing_indicator.dart';
 import '../models/message.dart';
 import '../models/quick_reply.dart';
 
 class ApiChatScreen extends StatefulWidget {
-  final String title;
-
-  const ApiChatScreen({
-    super.key,
-    required this.title,
-  });
+  const ApiChatScreen({super.key});
 
   @override
   State<ApiChatScreen> createState() => _ApiChatScreenState();
 }
 
 class _ApiChatScreenState extends State<ApiChatScreen> {
+  final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
+    _initializeChat();
+  }
+
+  void _initializeChat() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChatProvider>().loadMessages();
+      final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+      chatProvider.loadMessages(channelId: 'api');
     });
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _scrollToBottom() {
@@ -41,112 +47,91 @@ class _ApiChatScreenState extends State<ApiChatScreen> {
     }
   }
 
-  Future<void> _handleMediaSelected(PlatformFile file) async {
-    if (file.bytes == null) return;
+  void _sendMessage() {
+    final content = _messageController.text.trim();
+    if (content.isEmpty) return;
 
-    final chatProvider = context.read<ChatProvider>();
-    final url = await chatProvider.uploadMedia(file.bytes!, file.name);
-
-    if (url != null) {
-      final type = file.name.toLowerCase().endsWith('.mp4')
-          ? MessageType.video
-          : MessageType.image;
-      await chatProvider.sendMessage(
-        'Sent ${type == MessageType.video ? 'video' : 'image'}',
-        type: type,
-        mediaUrl: url,
-      );
-      _scrollToBottom();
-    }
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    chatProvider.sendMessage(
+      content,
+      channelId: 'api',
+      serverId: 'api',
+    );
+    _messageController.clear();
+    _scrollToBottom();
   }
 
-  Future<void> _refreshMessages() async {
-    await context.read<ChatProvider>().loadMessages();
-    _scrollToBottom();
+  void _handleQuickReply(QuickReply reply) {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    chatProvider.handleQuickReply(reply.text, 'api', 'api');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () => Scaffold.of(context).openDrawer(),
-        ),
-        title: Row(
-          children: [
-            const CircleAvatar(
-              backgroundColor: Colors.green,
-              radius: 5,
-            ),
-            const SizedBox(width: 8),
-            Text(widget.title),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _refreshMessages,
-          ),
-        ],
+        title: const Text('Chat API Demo'),
       ),
       body: Column(
         children: [
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-              ),
-              child: Consumer<ChatProvider>(
-                builder: (context, chatProvider, child) {
-                  if (chatProvider.isLoading) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  return Stack(
-                    children: [
-                      RefreshIndicator(
-                        onRefresh: _refreshMessages,
-                        child: ListView.builder(
-                          controller: _scrollController,
-                          padding: const EdgeInsets.all(8.0),
-                          itemCount: chatProvider.messages.length,
-                          itemBuilder: (context, index) {
-                            final message = chatProvider.messages[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8.0),
-                              child: MessageBubble(
-                                message: message,
-                                onQuickReplySelected: (dynamic reply) {
-                                  if (reply is QuickReply) {
-                                    chatProvider.handleQuickReply(reply);
-                                    _scrollToBottom();
-                                  }
-                                },
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      if (chatProvider.isTyping)
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: const TypingIndicator(),
-                        ),
-                    ],
+            child: Consumer<ChatProvider>(
+              builder: (context, chatProvider, _) {
+                final messages = chatProvider.getMessagesForChannel('api');
+                
+                if (messages.isEmpty) {
+                  return const Center(
+                    child: Text('No messages yet'),
                   );
-                },
-              ),
+                }
+
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(8),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final message = messages[index];
+                    return MessageBubble(
+                      message: message,
+                      isMe: message.isMe,
+                    );
+                  },
+                );
+              },
             ),
           ),
-          ChatInput(
-            onSendMessage: (String content) async {
-              await context.read<ChatProvider>().sendMessage(content);
-              _scrollToBottom();
-            },
-            onMediaSelected: _handleMediaSelected,
+          _buildMessageInput(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageInput() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _messageController,
+              decoration: const InputDecoration(
+                hintText: 'Type a message...',
+                border: InputBorder.none,
+              ),
+              onSubmitted: (_) => _sendMessage(),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.send),
+            onPressed: _sendMessage,
           ),
         ],
       ),

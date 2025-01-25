@@ -1,104 +1,70 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
-import '../models/message.dart';
 import '../models/quick_reply.dart';
 
+class ApiResponse {
+  final String content;
+  final List<QuickReply>? quickReplies;
+
+  const ApiResponse({
+    required this.content,
+    this.quickReplies,
+  });
+
+  factory ApiResponse.fromJson(Map<String, dynamic> json) {
+    return ApiResponse(
+      content: json['content'] as String,
+      quickReplies: (json['quickReplies'] as List?)
+          ?.map((e) => QuickReply.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
 class ApiService {
-  static const String baseUrl = 'http://localhost:8000/api';
+  static const String baseUrl = 'http://localhost:3000/api';
 
-  // Get all messages
-  Future<List<Message>> getMessages() async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/messages'));
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => Message.fromJson(json)).toList();
-      }
-      throw Exception('Failed to load messages');
-    } catch (e) {
-      throw Exception('Error: $e');
-    }
-  }
-
-  // Send a new message
-  Future<Map<String, Message>> sendMessage(Message message) async {
+  Future<ApiResponse> getBotResponse(String message) async {
     try {
       final response = await http.post(
-        Uri.parse('$baseUrl/messages'),
+        Uri.parse('$baseUrl/chat'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode(message.toJson()),
+        body: json.encode({'message': message}),
       );
-      
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return {
-          'userMessage': Message.fromJson(data['userMessage']),
-          'botResponse': Message.fromJson(data['botResponse']),
-        };
+        return ApiResponse.fromJson(data);
+      } else {
+        throw Exception('Failed to get bot response');
       }
-      throw Exception('Failed to send message');
     } catch (e) {
-      throw Exception('Error: $e');
+      throw Exception('Error communicating with the server: $e');
     }
   }
 
-  // Handle quick reply
-  Future<Message> handleQuickReply(QuickReply reply) async {
+  Future<String> uploadMedia(String filePath) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/quick-replies'),
-        headers: {'Content-Type': 'application/json'},
-        body: json.encode(reply.toJson()),
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/upload'),
       );
-      
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return Message.fromJson(data['botResponse']);
-      }
-      throw Exception('Failed to handle quick reply');
-    } catch (e) {
-      throw Exception('Error: $e');
-    }
-  }
 
-  // Upload media file
-  Future<String> uploadMedia(List<int> bytes, String fileName, String mimeType) async {
-    try {
-      var uri = Uri.parse('$baseUrl/media');
-      var request = http.MultipartRequest('POST', uri);
-      
       request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          bytes,
-          filename: fileName,
-          contentType: MediaType.parse(mimeType),
-        ),
+        await http.MultipartFile.fromPath('file', filePath),
       );
 
-      var response = await request.send();
-      var responseData = await response.stream.bytesToString();
-      
-      if (response.statusCode == 200) {
-        final json = jsonDecode(responseData);
-        return json['url'];
-      }
-      throw Exception('Failed to upload media');
-    } catch (e) {
-      throw Exception('Error: $e');
-    }
-  }
+      final response = await request.send();
+      final responseData = await response.stream.bytesToString();
 
-  // Clear all messages
-  Future<void> clearMessages() async {
-    try {
-      final response = await http.delete(Uri.parse('$baseUrl/messages'));
-      if (response.statusCode != 200) {
-        throw Exception('Failed to clear messages');
+      if (response.statusCode == 200) {
+        final data = json.decode(responseData);
+        return data['url'];
+      } else {
+        throw Exception('Failed to upload media');
       }
     } catch (e) {
-      throw Exception('Error: $e');
+      throw Exception('Error uploading media: $e');
     }
   }
 }

@@ -1,14 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/chat_provider.dart';
+import '../models/message.dart';
 
-class ChatDrawer extends StatelessWidget {
-  final int selectedIndex;
-  final Function(int) onSelect;
-
+class ChatDrawer extends StatefulWidget {
+  final Function(String) onSelectChat;
+  
   const ChatDrawer({
     super.key,
-    required this.selectedIndex,
-    required this.onSelect,
+    required this.onSelectChat,
   });
+
+  @override
+  State<ChatDrawer> createState() => _ChatDrawerState();
+}
+
+class _ChatDrawerState extends State<ChatDrawer> {
+  final List<String> _chatRooms = ['General', 'Support', 'Feedback'];
+  String _selectedRoom = 'General';
 
   @override
   Widget build(BuildContext context) {
@@ -17,90 +26,85 @@ class ChatDrawer extends StatelessWidget {
         children: [
           DrawerHeader(
             decoration: BoxDecoration(
-              color: Theme.of(context).primaryColor,
+              color: Theme.of(context).colorScheme.primary,
             ),
-            child: const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: Colors.white,
-                    child: Icon(Icons.chat, size: 40, color: Colors.deepPurple),
-                  ),
-                  SizedBox(height: 12),
-                  Text(
-                    'RCS Chat',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+            child: Center(
+              child: Text(
+                'Chat Rooms',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onPrimary,
+                  fontSize: 24,
+                ),
               ),
             ),
           ),
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.zero,
-              children: [
-                _buildChatItem(
-                  context,
-                  index: 0,
-                  title: 'Bot Chat',
-                  subtitle: 'Quick Replies & Media',
-                  icon: Icons.android,
-                ),
-                _buildChatItem(
-                  context,
-                  index: 1,
-                  title: 'API Chat',
-                  subtitle: 'localhost:3000',
-                  icon: Icons.api,
-                ),
-              ],
+            child: ListView.builder(
+              itemCount: _chatRooms.length,
+              itemBuilder: (context, index) {
+                final room = _chatRooms[index];
+                return ListTile(
+                  leading: const Icon(Icons.chat),
+                  title: Text(room),
+                  selected: room == _selectedRoom,
+                  onTap: () {
+                    setState(() {
+                      _selectedRoom = room;
+                    });
+                    widget.onSelectChat(room);
+                    Navigator.pop(context);
+                  },
+                );
+              },
             ),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.add),
+            title: const Text('New Chat Room'),
+            onTap: () => _showAddRoomDialog(context),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildChatItem(
-    BuildContext context, {
-    required int index,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-  }) {
-    final isSelected = selectedIndex == index;
+  void _showAddRoomDialog(BuildContext context) {
+    final textController = TextEditingController();
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isSelected ? Theme.of(context).primaryColor.withOpacity(0.1) : null,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: isSelected
-              ? Theme.of(context).primaryColor
-              : Colors.grey.withOpacity(0.2),
-          child: Icon(
-            icon,
-            color: isSelected ? Colors.white : Colors.grey,
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add New Chat Room'),
+        content: TextField(
+          controller: textController,
+          decoration: const InputDecoration(
+            labelText: 'Room Name',
+            hintText: 'Enter room name',
           ),
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
         ),
-        title: Text(
-          title,
-          style: TextStyle(
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
-        ),
-        subtitle: Text(subtitle),
-        selected: isSelected,
-        onTap: () => onSelect(index),
+          TextButton(
+            onPressed: () {
+              final name = textController.text.trim();
+              if (name.isNotEmpty) {
+                setState(() {
+                  _chatRooms.add(name);
+                  _selectedRoom = name;
+                });
+                widget.onSelectChat(name);
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
       ),
     );
   }
