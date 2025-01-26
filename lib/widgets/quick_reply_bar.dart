@@ -1,39 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/chat_provider.dart';
-import '../models/chat_message.dart';
+import '../providers/system_chat_provider.dart';
 import '../models/quick_reply.dart';
 import 'quick_reply_button.dart';
 
 class QuickReplyBar extends StatelessWidget {
-  final ChatMessage message;
+  final Function(String) onReplySelected;
 
   const QuickReplyBar({
-    super.key,
-    required this.message,
-  });
+    Key? key,
+    required this.onReplySelected,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    if (message.type != MessageType.quickReply && 
-        message.type != MessageType.suggestion ||
-        message.suggestedReplies == null || 
-        message.suggestedReplies!.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
     return Container(
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: message.suggestedReplies!.length,
-        itemBuilder: (context, index) {
-          final reply = message.suggestedReplies![index];
-          return QuickReplyButton(
-            reply: reply,
-            onTap: () {
-              context.read<ChatProvider>().addTextMessage(reply.text);
+      child: Consumer<SystemChatProvider>(
+        builder: (context, provider, child) {
+          final commands = provider.getSystemCommands();
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: commands.length,
+            itemBuilder: (context, index) {
+              final quickReply = commands[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: QuickReplyButton(
+                  quickReply: quickReply,
+                  onTap: () => onReplySelected(quickReply.value),
+                ),
+              );
             },
           );
         },

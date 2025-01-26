@@ -1,17 +1,12 @@
 import 'package:flutter/material.dart';
+import '../services/gif_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'dart:async';
-import 'dart:math' show pow, log;
 
 class GifPicker extends StatefulWidget {
   final Function(String) onGifSelected;
 
-  const GifPicker({
-    Key? key,
-    required this.onGifSelected,
-  }) : super(key: key);
+  const GifPicker({Key? key, required this.onGifSelected}) : super(key: key);
 
   @override
   State<GifPicker> createState() => _GifPickerState();
@@ -20,91 +15,74 @@ class GifPicker extends StatefulWidget {
 class _GifPickerState extends State<GifPicker> {
   final TextEditingController _searchController = TextEditingController();
   List<String> _gifs = [];
-  bool _isLoading = false;
-  String _searchQuery = '';
-  Timer? _debounceTimer;
+  bool _isLoading = true;
+  Timer? _debounce;
 
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(_onSearchChanged);
     _loadTrendingGifs();
-  }
-
-  void _onSearchChanged() {
-    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
-    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
-      if (_searchController.text != _searchQuery) {
-        _searchQuery = _searchController.text;
-        if (_searchQuery.isEmpty) {
-          _loadTrendingGifs();
-        } else {
-          _searchGifs(_searchQuery);
-        }
-      }
-    });
-  }
-
-  Future<void> _loadTrendingGifs() async {
-    setState(() => _isLoading = true);
-    try {
-      // Here you would typically use a GIF API like GIPHY or Tenor
-      // For demo purposes, we'll use placeholder GIFs
-      _gifs = List.generate(20, (index) => 
-        'https://via.placeholder.com/200x200.gif?text=GIF+$index'
-      );
-    } catch (e) {
-      debugPrint('Error loading GIFs: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _searchGifs(String query) async {
-    setState(() => _isLoading = true);
-    try {
-      // Here you would typically search using a GIF API
-      // For demo purposes, we'll use placeholder GIFs
-      _gifs = List.generate(10, (index) => 
-        'https://via.placeholder.com/200x200.gif?text=$query+$index'
-      );
-    } catch (e) {
-      debugPrint('Error searching GIFs: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
   }
 
   @override
   void dispose() {
     _searchController.dispose();
-    _debounceTimer?.cancel();
+    _debounce?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadTrendingGifs() async {
+    setState(() => _isLoading = true);
+    final gifs = await GifService.getTrendingGifs();
+    if (mounted) {
+      setState(() {
+        _gifs = gifs;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _searchGifs(String query) async {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+    _debounce = Timer(const Duration(milliseconds: 500), () async {
+      if (query.isEmpty) {
+        _loadTrendingGifs();
+        return;
+      }
+      setState(() => _isLoading = true);
+      final gifs = await GifService.searchGifs(query);
+      if (mounted) {
+        setState(() {
+          _gifs = gifs;
+          _isLoading = false;
+        });
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.7,
-      padding: const EdgeInsets.all(8),
+      height: MediaQuery.of(context).size.height * 0.5,
+      padding: const EdgeInsets.all(8.0),
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
+          Container(
+            margin: const EdgeInsets.only(bottom: 8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(24.0),
+              border: Border.all(color: Theme.of(context).dividerColor),
+            ),
             child: TextField(
               controller: _searchController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 hintText: 'Search GIFs...',
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                filled: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
+                border: InputBorder.none,
+                icon: Icon(Icons.search),
               ),
+              onChanged: _searchGifs,
             ),
           ),
           Expanded(
@@ -113,26 +91,26 @@ class _GifPickerState extends State<GifPicker> {
                 : GridView.builder(
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
-                      crossAxisSpacing: 8,
-                      mainAxisSpacing: 8,
+                      crossAxisSpacing: 8.0,
+                      mainAxisSpacing: 8.0,
                     ),
                     itemCount: _gifs.length,
                     itemBuilder: (context, index) {
                       return InkWell(
                         onTap: () => widget.onGifSelected(_gifs[index]),
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12.0),
                           child: CachedNetworkImage(
                             imageUrl: _gifs[index],
                             fit: BoxFit.cover,
                             placeholder: (context, url) => Container(
-                              color: Colors.grey[300],
+                              color: Theme.of(context).cardColor,
                               child: const Center(
                                 child: CircularProgressIndicator(),
                               ),
                             ),
                             errorWidget: (context, url, error) => Container(
-                              color: Colors.grey[300],
+                              color: Theme.of(context).cardColor,
                               child: const Icon(Icons.error),
                             ),
                           ),

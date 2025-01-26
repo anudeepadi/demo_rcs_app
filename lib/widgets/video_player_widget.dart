@@ -2,18 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
 
 class VideoPlayerWidget extends StatefulWidget {
   final String videoUrl;
   final bool autoPlay;
   final bool looping;
+  final bool showControls;
 
   const VideoPlayerWidget({
-    super.key,
+    Key? key,
     required this.videoUrl,
     this.autoPlay = false,
     this.looping = false,
-  });
+    this.showControls = true,
+  }) : super(key: key);
 
   @override
   State<VideoPlayerWidget> createState() => _VideoPlayerWidgetState();
@@ -22,7 +25,9 @@ class VideoPlayerWidget extends StatefulWidget {
 class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   late VideoPlayerController _videoPlayerController;
   ChewieController? _chewieController;
-  bool _isYouTubeVideo = false;
+  bool _isInitialized = false;
+  bool _hasError = false;
+  String _errorMessage = '';
 
   @override
   void initState() {
@@ -31,100 +36,93 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   }
 
   Future<void> _initializePlayer() async {
-    if (widget.videoUrl.contains('youtube.com') || widget.videoUrl.contains('youtu.be')) {
-      setState(() {
-        _isYouTubeVideo = true;
-      });
-      return;
-    }
-
-    _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
-
     try {
+      if (widget.videoUrl.startsWith('http')) {
+        _videoPlayerController = VideoPlayerController.networkUrl(
+          Uri.parse(widget.videoUrl),
+        );
+      } else {
+        _videoPlayerController = VideoPlayerController.file(
+          File(widget.videoUrl),
+        );
+      }
+
       await _videoPlayerController.initialize();
+
       _chewieController = ChewieController(
         videoPlayerController: _videoPlayerController,
         autoPlay: widget.autoPlay,
         looping: widget.looping,
+        showControls: widget.showControls,
+        aspectRatio: _videoPlayerController.value.aspectRatio,
         errorBuilder: (context, errorMessage) {
           return Center(
-            child: Text(
-              'Error: $errorMessage',
-              style: const TextStyle(color: Colors.white),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, color: Colors.red, size: 42),
+                const SizedBox(height: 8),
+                Text(
+                  errorMessage,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.red),
+                ),
+                if (widget.videoUrl.startsWith('http')) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('Open in Browser'),
+                    onPressed: () async {
+                      final url = Uri.parse(widget.videoUrl);
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url);
+                      }
+                    },
+                  ),
+                ],
+              ],
             ),
           );
         },
-        placeholder: Container(
-          color: Colors.black,
-          child: const Center(
-            child: CircularProgressIndicator(),
-          ),
-        ),
       );
-      if (mounted) setState(() {});
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading video: $e')),
-        );
-      }
-    }
-  }
 
-  Future<void> _launchYouTube() async {
-    try {
-      final uri = Uri.parse(widget.videoUrl);
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      } else {
-        throw 'Could not launch YouTube video';
-      }
+      setState(() => _isInitialized = true);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error opening YouTube: $e')),
-        );
-      }
+      setState(() {
+        _hasError = true;
+        _errorMessage = 'Error loading video: $e';
+      });
+      print('Error initializing video player: $e');
     }
   }
 
   @override
+  void dispose() {
+    _videoPlayerController.dispose();
+    _chewieController?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (_isYouTubeVideo) {
-      return GestureDetector(
-        onTap: _launchYouTube,
-        child: Container(
-          width: 300,
-          height: 180,
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.play_circle_filled,
-                  color: Colors.white,
-                  size: 48,
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Open in YouTube',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
+    if (_hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error, color: Colors.red, size: 42),
+            const SizedBox(height: 8),
+            Text(
+              _errorMessage,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.red),
             ),
-          ),
+          ],
         ),
       );
     }
 
-    if (_chewieController == null) {
+    if (!_isInitialized) {
       return const Center(
         child: CircularProgressIndicator(),
       );
@@ -134,12 +132,5 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       aspectRatio: _videoPlayerController.value.aspectRatio,
       child: Chewie(controller: _chewieController!),
     );
-  }
-
-  @override
-  void dispose() {
-    _videoPlayerController.dispose();
-    _chewieController?.dispose();
-    super.dispose();
   }
 }

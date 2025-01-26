@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import '../services/gif_service.dart';
 
 class ChatInput extends StatefulWidget {
@@ -18,161 +17,96 @@ class ChatInput extends StatefulWidget {
 
 class _ChatInputState extends State<ChatInput> {
   final TextEditingController _controller = TextEditingController();
-  final GifService _gifService = GifService();
-  bool _isShowingGifPicker = false;
-  String _gifSearchQuery = '';
-  List<String> _gifs = [];
   bool _isComposing = false;
+  bool _isSearchingGifs = false;
+  List<String> _gifs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_handleTextChange);
+  }
 
   @override
   void dispose() {
+    _controller.removeListener(_handleTextChange);
     _controller.dispose();
     super.dispose();
   }
 
-  void _handleSubmit() {
-    final message = _controller.text.trim();
-    if (message.isNotEmpty) {
-      widget.onMessageSubmit(message);
-      _controller.clear();
+  void _handleTextChange() {
+    setState(() {
+      _isComposing = _controller.text.isNotEmpty;
+    });
+  }
+
+  void _handleSubmitted(String text) {
+    if (text.isEmpty) return;
+    
+    widget.onMessageSubmit(text);
+    _controller.clear();
+    setState(() {
+      _isComposing = false;
+    });
+  }
+
+  Future<void> _searchGifs(String query) async {
+    if (query.isEmpty) {
       setState(() {
-        _isComposing = false;
+        _isSearchingGifs = false;
+        _gifs = [];
+      });
+      return;
+    }
+
+    setState(() => _isSearchingGifs = true);
+    final gifs = await GifService.searchGifs(query);
+    
+    if (mounted) {
+      setState(() {
+        _gifs = gifs;
+        _isSearchingGifs = false;
       });
     }
   }
 
-  Future<void> _showAttachmentOptions() async {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius: const BorderRadius.vertical(
-            top: Radius.circular(20),
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: Icon(
-                  Icons.gif,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                title: const Text('GIF'),
-                onTap: () {
-                  Navigator.pop(context);
-                  setState(() => _isShowingGifPicker = true);
-                },
-              ),
-              ListTile(
-                leading: Icon(
-                  Icons.attach_file,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                title: const Text('File'),
-                onTap: () async {
-                  Navigator.pop(context);
-                  final result = await FilePicker.platform.pickFiles();
-                  if (result != null) {
-                    // Handle file
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildGifPicker() {
+    if (!_isSearchingGifs && _gifs.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     return Container(
-      height: 300,
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, -5),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Search GIFs...',
-                      prefixIcon: const Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                    ),
-                    onChanged: (value) async {
-                      setState(() => _gifSearchQuery = value);
-                      if (value.isNotEmpty) {
-                        final gifs = await _gifService.searchGifs(value);
-                        setState(() => _gifs = gifs);
-                      }
-                    },
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => setState(() => _isShowingGifPicker = false),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(8),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                childAspectRatio: 4/3,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-              ),
+      height: 150,
+      margin: const EdgeInsets.only(bottom: 8),
+      child: _isSearchingGifs
+          ? const Center(child: CircularProgressIndicator())
+          : ListView.builder(
+              scrollDirection: Axis.horizontal,
               itemCount: _gifs.length,
               itemBuilder: (context, index) {
-                return InkWell(
+                return GestureDetector(
                   onTap: () {
                     widget.onGifSelected(_gifs[index]);
-                    setState(() => _isShowingGifPicker = false);
+                    _controller.clear();
+                    setState(() {
+                      _isSearchingGifs = false;
+                      _gifs = [];
+                    });
                   },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      _gifs[index],
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Center(
-                          child: CircularProgressIndicator(
-                            value: loadingProgress.expectedTotalBytes != null
-                                ? loadingProgress.cumulativeBytesLoaded /
-                                    loadingProgress.expectedTotalBytes!
-                                : null,
-                          ),
-                        );
-                      },
+                  child: Container(
+                    width: 150,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      image: DecorationImage(
+                        image: NetworkImage(_gifs[index]),
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                 );
               },
             ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -180,63 +114,45 @@ class _ChatInputState extends State<ChatInput> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        if (_isShowingGifPicker) _buildGifPicker(),
+        _buildGifPicker(),
         Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
+            color: Theme.of(context).cardColor,
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-                offset: const Offset(0, -5),
+                offset: const Offset(0, -2),
+                blurRadius: 4,
+                color: Colors.black12,
               ),
             ],
           ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.add),
-                    onPressed: _showAttachmentOptions,
-                  ),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      decoration: InputDecoration(
-                        hintText: 'Type a message',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
-                        ),
-                        filled: true,
-                        fillColor: Theme.of(context).colorScheme.surfaceVariant,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                      ),
-                      onChanged: (text) {
-                        setState(() {
-                          _isComposing = text.trim().isNotEmpty;
-                        });
-                      },
-                      onSubmitted: (text) => _handleSubmit(),
-                    ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.send,
-                      color: _isComposing
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).disabledColor,
-                    ),
-                    onPressed: _isComposing ? _handleSubmit : null,
-                  ),
-                ],
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.attach_file),
+                onPressed: () {
+                  // Handle file attachment
+                },
               ),
-            ),
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  onChanged: _searchGifs,
+                  decoration: const InputDecoration(
+                    hintText: 'Type a message...',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.all(16),
+                  ),
+                  onSubmitted: _handleSubmitted,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.send),
+                onPressed: _isComposing
+                    ? () => _handleSubmitted(_controller.text)
+                    : null,
+              ),
+            ],
           ),
         ),
       ],

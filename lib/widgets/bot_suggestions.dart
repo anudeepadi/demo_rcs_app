@@ -1,65 +1,32 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../providers/chat_provider.dart';
-import '../providers/bot_chat_provider.dart';
+import '../services/bot_service.dart';
 
 class BotSuggestions extends StatelessWidget {
-  const BotSuggestions({Key? key}) : super(key: key);
+  final Function(String) onSuggestionSelected;
+
+  const BotSuggestions({
+    Key? key,
+    required this.onSuggestionSelected,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<BotChatProvider>(
-      builder: (context, botProvider, _) {
-        if (botProvider.suggestions.isEmpty) {
-          return const SizedBox.shrink();
-        }
+    final suggestions = BotService.getSuggestedResponses();
 
-        return Container(
-          height: 50,
-          margin: const EdgeInsets.symmetric(vertical: 8),
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            itemCount: botProvider.suggestions.length,
-            itemBuilder: (context, index) {
-              final suggestion = botProvider.suggestions[index];
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: ElevatedButton(
-                  onPressed: () {
-                    final chatProvider = Provider.of<ChatProvider>(
-                      context,
-                      listen: false,
-                    );
-                    chatProvider.addTextMessage(suggestion.text);
-                    botProvider.clearSuggestions();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 8,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (suggestion.icon != null) ...[
-                        Icon(
-                          suggestion.icon,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      Text(suggestion.text),
-                    ],
-                  ),
-                ),
-              );
-            },
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: suggestions.length,
+      itemBuilder: (context, index) {
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+          child: ListTile(
+            onTap: () => onSuggestionSelected(suggestions[index]),
+            title: Text(
+              suggestions[index],
+              style: const TextStyle(fontSize: 14),
+            ),
+            trailing: const Icon(Icons.arrow_forward_ios, size: 16),
           ),
         );
       },
