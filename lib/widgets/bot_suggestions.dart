@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/quick_reply.dart';
 import '../providers/chat_provider.dart';
 import '../providers/bot_chat_provider.dart';
 
@@ -24,12 +23,13 @@ class BotSuggestions extends StatelessWidget {
             itemCount: botProvider.suggestions.length,
             itemBuilder: (context, index) {
               final suggestion = botProvider.suggestions[index];
+
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: ElevatedButton(
                   onPressed: () {
                     final chatProvider = Provider.of<ChatProvider>(
-                      context, 
+                      context,
                       listen: false,
                     );
                     chatProvider.addTextMessage(suggestion.text);
@@ -49,10 +49,7 @@ class BotSuggestions extends StatelessWidget {
                     children: [
                       if (suggestion.icon != null) ...[
                         Icon(
-                          IconData(
-                            int.parse(suggestion.icon!),
-                            fontFamily: 'MaterialIcons',
-                          ),
+                          suggestion.icon,
                           size: 18,
                         ),
                         const SizedBox(width: 8),

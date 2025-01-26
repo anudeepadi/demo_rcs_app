@@ -1,39 +1,42 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import '../models/quick_reply.dart';
+import '../models/channel.dart';
 
 class ApiService {
-  static const String baseUrl = 'https://api.example.com'; // Replace with your API URL
+  static const String baseUrl = 'http://localhost:8000';
 
-  Future<List<QuickReply>> fetchSuggestions() async {
+  Future<List<Channel>> getChannels() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/suggestions'));
+      final response = await http.get(Uri.parse('$baseUrl/channels'));
       
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return data.map((json) => QuickReply(
-          text: json['text'],
-          postbackData: json['postbackData'],
-          icon: json['icon'],
-        )).toList();
+        return data.map((json) => Channel.fromJson(json)).toList();
       }
       
-      return [];
+      throw Exception('Failed to load channels');
     } catch (e) {
-      print('Error fetching suggestions: $e');
+      print('Error getting channels: $e');
       return [];
     }
   }
 
-  Future<void> sendMessage(String message) async {
+  Future<Channel> createChannel(Channel channel) async {
     try {
-      await http.post(
-        Uri.parse('$baseUrl/messages'),
+      final response = await http.post(
+        Uri.parse('$baseUrl/channels'),
         headers: {'Content-Type': 'application/json'},
-        body: json.encode({'message': message}),
+        body: json.encode(channel.toJson()),
       );
+      
+      if (response.statusCode == 200) {
+        return Channel.fromJson(json.decode(response.body));
+      }
+      
+      throw Exception('Failed to create channel');
     } catch (e) {
-      print('Error sending message: $e');
+      print('Error creating channel: $e');
+      rethrow;
     }
   }
 }

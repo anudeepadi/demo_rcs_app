@@ -1,115 +1,90 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:video_compress/video_compress.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
+import 'package:cached_network_image/cached_network_image.dart';
 
-class VideoThumbnailViewer extends StatefulWidget {
-  final String videoUrl;
-  final double? width;
-  final double? height;
-  final VoidCallback? onTap;
+class VideoThumbnailViewer extends StatelessWidget {
+  final String thumbnailUrl;
+  final String? title;
+  final VoidCallback onTap;
 
   const VideoThumbnailViewer({
-    super.key,
-    required this.videoUrl,
-    this.width,
-    this.height,
-    this.onTap,
-  });
-
-  @override
-  State<VideoThumbnailViewer> createState() => _VideoThumbnailViewerState();
-}
-
-class _VideoThumbnailViewerState extends State<VideoThumbnailViewer> {
-  File? _thumbnailFile;
-
-  @override
-  void initState() {
-    super.initState();
-    _generateThumbnail();
-  }
-
-  Future<void> _generateThumbnail() async {
-    try {
-      // Download video file if it's a URL
-      if (widget.videoUrl.startsWith('http')) {
-        final tempDir = await getTemporaryDirectory();
-        final videoFile = File('${tempDir.path}/temp_video.mp4');
-        
-        final response = await http.get(Uri.parse(widget.videoUrl));
-        await videoFile.writeAsBytes(response.bodyBytes);
-        
-        final thumbnail = await VideoCompress.getFileThumbnail(
-          videoFile.path,
-          quality: 50,
-          position: -1, // milliseconds, -1 means the middle position
-        );
-        
-        if (mounted) {
-          setState(() {
-            _thumbnailFile = thumbnail;
-          });
-        }
-        
-        // Clean up the temporary video file
-        if (await videoFile.exists()) {
-          await videoFile.delete();
-        }
-      } else {
-        // Local file
-        final thumbnail = await VideoCompress.getFileThumbnail(
-          widget.videoUrl,
-          quality: 50,
-          position: -1,
-        );
-        
-        if (mounted) {
-          setState(() {
-            _thumbnailFile = thumbnail;
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error generating thumbnail: $e');
-    }
-  }
+    Key? key,
+    required this.thumbnailUrl,
+    this.title,
+    required this.onTap,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    if (_thumbnailFile == null) {
-      return SizedBox(
-        width: widget.width,
-        height: widget.height,
-        child: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
     return GestureDetector(
-      onTap: widget.onTap,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Image.file(
-            _thumbnailFile!,
-            width: widget.width,
-            height: widget.height,
-            fit: BoxFit.cover,
-          ),
-          Container(
-            width: widget.width,
-            height: widget.height,
-            decoration: BoxDecoration(
-              color: Colors.black.withAlpha(100),
+      onTap: onTap,
+      child: Container(
+        height: 200,
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            CachedNetworkImage(
+              imageUrl: thumbnailUrl,
+              fit: BoxFit.cover,
+              placeholder: (context, url) => const Center(
+                child: CircularProgressIndicator(),
+              ),
+              errorWidget: (context, url, error) => const Center(
+                child: Icon(
+                  Icons.error_outline,
+                  color: Colors.white,
+                  size: 48,
+                ),
+              ),
             ),
-          ),
-          Icon(
-            Icons.play_circle_filled,
-            size: (widget.height ?? 150) / 3,
-            color: Colors.white,
-          ),
-        ],
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.black.withOpacity(0.7),
+                  ],
+                ),
+              ),
+            ),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.play_arrow,
+                  color: Colors.white,
+                  size: 48,
+                ),
+              ),
+            ),
+            if (title != null)
+              Positioned(
+                left: 12,
+                right: 12,
+                bottom: 12,
+                child: Text(
+                  title!,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

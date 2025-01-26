@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../providers/channel_provider.dart';
 import '../providers/chat_provider.dart';
-import '../providers/bot_chat_provider.dart';
+import '../providers/system_chat_provider.dart';
 import '../widgets/chat_bubble.dart';
-import '../widgets/quick_reply_bar.dart';
-import '../widgets/suggestion_bar.dart';
 import '../widgets/chat_input.dart';
 import '../models/quick_reply.dart';
-import '../services/link_preview_service.dart';
-import '../services/gif_service.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({Key? key}) : super(key: key);
@@ -18,21 +15,26 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final LinkPreviewService _linkPreviewService = LinkPreviewService();
-  final GifService _gifService = GifService();
-  bool _isTyping = false;
 
   @override
-  void initState() {
-    super.initState();
-    _initializeChat();
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
-  Future<void> _initializeChat() async {
-    final botProvider = Provider.of<BotChatProvider>(context, listen: false);
-    await Future.delayed(const Duration(milliseconds: 500));
-    botProvider.setWelcomeMessage();
+  void _handleSubmitted(String text) {
+    if (text.trim().isEmpty) return;
+
+    final systemChatProvider = Provider.of<SystemChatProvider>(
+      context, 
+      listen: false,
+    );
+    systemChatProvider.addUserMessage(text);
+    _controller.clear();
+    _scrollToBottom();
   }
 
   void _scrollToBottom() {
@@ -45,185 +47,78 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _handleMessageSubmit(String message) async {
-    if (message.trim().isEmpty) return;
-
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    final botProvider = Provider.of<BotChatProvider>(context, listen: false);
-
-    // Add user message
-    chatProvider.addTextMessage(message);
-    _scrollToBottom();
-
-    // Check for link preview
-    if (_linkPreviewService.isValidUrl(message)) {
-      setState(() => _isTyping = true);
-      final preview = await _linkPreviewService.fetchLinkPreview(message);
-      if (preview != null) {
-        chatProvider.addLinkPreviewMessage(preview);
-      }
-    }
-
-    // Simulate bot typing
-    setState(() => _isTyping = true);
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Bot response with quick replies
-    final response = await botProvider.generateResponse(message);
-    chatProvider.addBotMessage(response);
-    
-    setState(() => _isTyping = false);
-    _scrollToBottom();
-
-    // Add quick reply suggestions
-    if (response.suggestedReplies?.isNotEmpty ?? false) {
-      botProvider.setSuggestions(response.suggestedReplies!);
-    }
-  }
-
-  Future<void> _handleGifSelected(String gifUrl) async {
-    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
-    chatProvider.addGifMessage(gifUrl);
-    _scrollToBottom();
-  }
-
-  void _handleQuickReplySelected(QuickReply reply) {
-    _handleMessageSubmit(reply.text);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('RCS Demo Chat'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {
-              // TODO: Show more options
-            },
-          ),
-        ],
+        title: const Text('RCS Assistant'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      body: SafeArea(
+      body: Container(
+        color: const Color(0xFF121212),
         child: Column(
           children: [
-            const SuggestionBar(),
             Expanded(
-              child: Consumer<ChatProvider>(
-                builder: (context, chatProvider, _) {
+              child: Consumer<SystemChatProvider>(
+                builder: (context, provider, _) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+                  
                   return ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(8.0),
-                    itemCount: chatProvider.messages.length + (_isTyping ? 1 : 0),
+                    itemCount: provider.messages.length,
                     itemBuilder: (context, index) {
-                      if (index == chatProvider.messages.length && _isTyping) {
-                        return const TypingIndicator();
-                      }
-                      final message = chatProvider.messages[index];
+                      final message = provider.messages[index];
                       return ChatBubble(
                         message: message,
-                        onQuickReplySelected: _handleQuickReplySelected,
+                        onQuickReplySelected: (replyText) => _handleSubmitted(replyText),
                       );
                     },
                   );
                 },
               ),
             ),
-            const QuickReplyBar(),
-            ChatInput(
-              onMessageSubmit: _handleMessageSubmit,
-              onGifSelected: _handleGifSelected,
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2C2C2C),
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                      child: TextField(
+                        controller: _controller,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: const InputDecoration(
+                          hintText: 'Type a message',
+                          hintStyle: TextStyle(color: Colors.grey),
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          border: InputBorder.none,
+                        ),
+                        onSubmitted: _handleSubmitted,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  CircleAvatar(
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    child: IconButton(
+                      icon: const Icon(Icons.send, color: Colors.white),
+                      onPressed: () => _handleSubmitted(_controller.text),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
       ),
-    );
-  }
-}
-
-class TypingIndicator extends StatelessWidget {
-  const TypingIndicator({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              children: List.generate(3, (index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                  child: AnimatedDot(delay: index * 300),
-                );
-              }),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class AnimatedDot extends StatefulWidget {
-  final int delay;
-
-  const AnimatedDot({Key? key, required this.delay}) : super(key: key);
-
-  @override
-  State<AnimatedDot> createState() => _AnimatedDotState();
-}
-
-class _AnimatedDotState extends State<AnimatedDot>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-
-    Future.delayed(Duration(milliseconds: widget.delay), () {
-      if (mounted) {
-        _controller.repeat(reverse: true);
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .primary
-                .withOpacity(0.4 + (_controller.value * 0.6)),
-            shape: BoxShape.circle,
-          ),
-        );
-      },
     );
   }
 }
