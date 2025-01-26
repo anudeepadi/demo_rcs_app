@@ -1,76 +1,62 @@
-import 'package:flutter/material.dart';
-import '../models/quick_reply.dart';
+import 'package:flutter/foundation.dart';
 import '../models/chat_message.dart';
-import 'package:uuid/uuid.dart';
+import '../models/quick_reply.dart';
 
-class SystemChatProvider extends ChangeNotifier {
+class SystemChatProvider with ChangeNotifier {
+  final String systemUserId = 'system';
   final List<ChatMessage> _messages = [];
-  List<ChatMessage> get messages => _messages;
-  final _uuid = Uuid();
 
-  void addUserMessage(String content) {
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+
+  Future<void> sendSystemMessage(String content) async {
     final message = ChatMessage(
-      id: _uuid.v4(),
-      content: content,
-      isMe: true,
-      timestamp: DateTime.now(),
+      senderId: systemUserId,
       type: MessageType.text,
+      content: content,
+      isMe: false,
       status: MessageStatus.sent,
     );
+
     _messages.add(message);
     notifyListeners();
   }
 
-  void addGifMessage(String gifUrl) {
+  Future<void> sendSystemMedia({
+    required String mediaUrl,
+    required MessageType type,
+    String? caption,
+  }) async {
     final message = ChatMessage(
-      id: _uuid.v4(),
-      content: gifUrl,
-      isMe: true,
-      timestamp: DateTime.now(),
-      type: MessageType.gif,
-      mediaUrl: gifUrl,
+      senderId: systemUserId,
+      type: type,
+      content: caption ?? '',
+      isMe: false,
+      mediaUrl: mediaUrl,
       status: MessageStatus.sent,
     );
+
     _messages.add(message);
     notifyListeners();
   }
 
-  List<QuickReply> getSystemCommands() {
-    return [
-      QuickReply(
-        text: 'Clear Chat',
-        value: '/clear',
-        icon: Icons.clear_all,
-      ),
-      QuickReply(
-        text: 'Export Chat',
-        value: '/export',
-        icon: Icons.download,
-      ),
-      QuickReply(
-        text: 'Theme',
-        value: '/theme',
-        icon: Icons.palette,
-      ),
-    ];
-  }
+  Future<void> sendSystemQuickReplies({
+    required List<QuickReply> replies,
+    String? content,
+  }) async {
+    final message = ChatMessage(
+      senderId: systemUserId,
+      type: MessageType.quickReply,
+      content: content ?? '',
+      isMe: false,
+      suggestedReplies: replies.map((r) => r.text).toList(),
+      status: MessageStatus.sent,
+    );
 
-  void handleSystemCommand(String command) {
-    switch (command) {
-      case '/clear':
-        _messages.clear();
-        break;
-      case '/export':
-        // Implement export functionality
-        break;
-      case '/theme':
-        // Implement theme switching
-        break;
-    }
+    _messages.add(message);
     notifyListeners();
   }
 
-  void clearChat() {
+  void clear() {
     _messages.clear();
     notifyListeners();
   }

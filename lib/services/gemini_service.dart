@@ -1,35 +1,38 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import '../models/chat_message.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 
 class GeminiService {
-  static const String apiKey = 'YOUR_GEMINI_API_KEY';
-  static const String baseUrl = 'https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent';
+  static const String apiKey = 'AIzaSyCODVjQ7aIyDAcHXXW3XBiB9quiPwznocs'; // Replace with your actual API key
+  late final GenerativeModel _model;
 
-  Future<String> getGeminiResponse(String message) async {
+  GeminiService() {
+    _model = GenerativeModel(
+      model: 'gemini-pro',
+      apiKey: apiKey,
+    );
+  }
+
+  Future<String> generateResponse(String prompt) async {
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl?key=$apiKey'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'contents': [{
-            'parts': [{
-              'text': message
-            }]
-          }]
-        }),
-      );
-
-      if (response.statusCode == 200) {
-        final jsonResponse = jsonDecode(response.body);
-        return jsonResponse['candidates'][0]['content']['parts'][0]['text'];
-      } else {
-        throw Exception('Failed to get response from Gemini API');
-      }
+      final content = [Content.text(prompt)];
+      final response = await _model.generateContent(content);
+      return response.text ?? 'No response generated';
     } catch (e) {
-      throw Exception('Error communicating with Gemini API: $e');
+      throw Exception('Failed to generate response: $e');
+    }
+  }
+
+  Future<List<String>> generateChatSuggestions(String context) async {
+    try {
+      final prompt = 'Based on this context: "$context", suggest 3 short, relevant responses that a user might want to send. Format them as a simple comma-separated list.';
+      final response = await generateResponse(prompt);
+      return response
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .take(3)
+          .toList();
+    } catch (e) {
+      return [];
     }
   }
 }

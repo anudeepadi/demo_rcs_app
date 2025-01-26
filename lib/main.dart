@@ -4,6 +4,7 @@ import 'providers/chat_provider.dart';
 import 'providers/bot_chat_provider.dart';
 import 'providers/channel_provider.dart';
 import 'providers/system_chat_provider.dart';
+import 'providers/gemini_chat_provider.dart';
 import 'screens/home_screen.dart';
 import 'theme/app_theme.dart';
 
@@ -22,6 +23,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BotChatProvider()),
         ChangeNotifierProvider(create: (_) => ChannelProvider()),
         ChangeNotifierProvider(create: (_) => SystemChatProvider()),
+        ChangeNotifierProvider(create: (_) => GeminiChatProvider()),
       ],
       child: MaterialApp(
         title: 'RCS Demo App',

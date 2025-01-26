@@ -1,157 +1,209 @@
 import 'package:flutter/material.dart';
 import '../models/chat_message.dart';
 import '../models/quick_reply.dart';
-import 'quick_reply_button.dart';
 
 class MessageBubble extends StatelessWidget {
-  final ChatMessage chatMessage;
-  final Function(QuickReply) onQuickReplySelected;
-  final Function(String)? onReactionAdd;
+  final ChatMessage message;
+  final Widget child;
   final VoidCallback? onReplyTap;
+  final Function(String)? onReactionAdd;
+  final VoidCallback? onThreadTap;
+  final VoidCallback? onLongPress;
 
   const MessageBubble({
     Key? key,
-    required this.chatMessage,
-    required this.onQuickReplySelected,
-    this.onReactionAdd,
+    required this.message,
+    required this.child,
     this.onReplyTap,
+    this.onReactionAdd,
+    this.onThreadTap,
+    this.onLongPress,
   }) : super(key: key);
-
-  Widget _buildContent(BuildContext context) {
-    switch (chatMessage.type) {
-      case MessageType.text:
-        return Text(
-          chatMessage.content,
-          style: TextStyle(
-            color: chatMessage.isMe ? Colors.white : Theme.of(context).textTheme.bodyLarge?.color,
-          ),
-        );
-      case MessageType.gif:
-        return Image.network(
-          chatMessage.mediaUrl!,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return const Center(child: CircularProgressIndicator());
-          },
-          errorBuilder: (context, error, stackTrace) => const Icon(Icons.error),
-        );
-      case MessageType.quickReply:
-        return Wrap(
-          spacing: 8,
-          children: (chatMessage.suggestedReplies ?? []).map((reply) {
-            return QuickReplyButton(
-              quickReply: reply,
-              onTap: () => onQuickReplySelected(reply),
-            );
-          }).toList(),
-        );
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-
-  Widget _buildMessageStatus() {
-    switch (chatMessage.status) {
-      case MessageStatus.sending:
-        return const Icon(Icons.access_time, size: 12);
-      case MessageStatus.sent:
-        return const Icon(Icons.check, size: 12);
-      case MessageStatus.delivered:
-        return const Icon(Icons.done_all, size: 12);
-      case MessageStatus.read:
-        return const Icon(Icons.done_all, size: 12, color: Colors.blue);
-      case MessageStatus.failed:
-        return const Icon(Icons.error_outline, size: 12, color: Colors.red);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
-    return Align(
-      alignment: chatMessage.isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+    return Column(
+      crossAxisAlignment: message.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [
+        if (message.suggestedReplies != null && message.suggestedReplies!.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(
+              left: message.isMe ? 48 : 16,
+              right: message.isMe ? 16 : 48,
+              bottom: 8,
+            ),
+            child: Wrap(
+              spacing: 8,
+              children: message.suggestedReplies!.map((reply) {
+                final quickReply = QuickReply.fromString(reply);
+                return _buildQuickReply(context, quickReply);
+              }).toList(),
+            ),
+          ),
+        _buildMessageContent(context),
+      ],
+    );
+  }
+
+  Widget _buildQuickReply(BuildContext context, QuickReply reply) {
+    final theme = Theme.of(context);
+    
+    return Material(
+      color: theme.colorScheme.primaryContainer,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: () => onReplyTap?.call(),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Text(
+            reply.text,
+            style: TextStyle(
+              color: theme.colorScheme.onPrimaryContainer,
+              fontSize: 14,
+            ),
+          ),
         ),
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        child: Column(
-          crossAxisAlignment: chatMessage.isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (chatMessage.parentMessageId != null)
-              GestureDetector(
-                onTap: onReplyTap,
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).disabledColor.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Text('Reply to message'),
-                ),
-              ),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: chatMessage.isMe 
-                    ? Theme.of(context).primaryColor 
-                    : Theme.of(context).cardColor,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    offset: const Offset(0, 1),
-                    blurRadius: 2,
-                    color: Colors.black.withOpacity(0.1),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildContent(context),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '${chatMessage.timestamp.hour}:${chatMessage.timestamp.minute.toString().padLeft(2, '0')}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: chatMessage.isMe 
-                              ? Colors.white.withOpacity(0.7)
-                              : Colors.black.withOpacity(0.5),
-                        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageContent(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Container(
+      margin: EdgeInsets.only(
+        left: message.isMe ? 64 : 16,
+        right: message.isMe ? 16 : 64,
+        bottom: 4,
+      ),
+      child: Stack(
+        children: [
+          Material(
+            color: message.isMe ? theme.colorScheme.primary : theme.colorScheme.surfaceVariant,
+            borderRadius: BorderRadius.circular(16),
+            child: InkWell(
+              onLongPress: onLongPress,
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DefaultTextStyle(
+                      style: theme.textTheme.bodyMedium!.copyWith(
+                        color: message.isMe 
+                            ? theme.colorScheme.onPrimary 
+                            : theme.colorScheme.onSurfaceVariant,
                       ),
-                      if (chatMessage.isMe) ...[
-                        const SizedBox(width: 4),
-                        _buildMessageStatus(),
-                      ],
-                    ],
-                  ),
-                ],
+                      child: child,
+                    ),
+                    const SizedBox(height: 4),
+                    _buildFooter(context),
+                  ],
+                ),
               ),
             ),
-            if (chatMessage.reactions.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Wrap(
-                  spacing: 4,
-                  children: chatMessage.reactions.map((reaction) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Theme.of(context).dividerColor),
-                      ),
-                      child: Text(reaction.emoji, style: const TextStyle(fontSize: 12)),
-                    );
-                  }).toList(),
-                ),
+          ),
+          if (message.reactions.isNotEmpty)
+            _buildReactions(context),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _formatTime(message.timestamp),
+          style: theme.textTheme.bodySmall!.copyWith(
+            color: message.isMe 
+                ? theme.colorScheme.onPrimary.withOpacity(0.7)
+                : theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+          ),
+        ),
+        const SizedBox(width: 4),
+        _buildStatusIcon(context),
+      ],
+    );
+  }
+
+  Widget _buildStatusIcon(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = message.isMe 
+        ? theme.colorScheme.onPrimary.withOpacity(0.7)
+        : theme.colorScheme.onSurfaceVariant.withOpacity(0.7);
+
+    switch (message.status) {
+      case MessageStatus.sending:
+        return SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        );
+      case MessageStatus.sent:
+        return Icon(Icons.check, size: 16, color: color);
+      case MessageStatus.delivered:
+        return Icon(Icons.done_all, size: 16, color: color);
+      case MessageStatus.read:
+        return Icon(Icons.done_all, size: 16, color: theme.colorScheme.primary);
+      case MessageStatus.failed:
+        return Icon(Icons.error_outline, size: 16, color: theme.colorScheme.error);
+    }
+  }
+
+  Widget _buildReactions(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    return Positioned(
+      bottom: -8,
+      right: message.isMe ? null : 8,
+      left: message.isMe ? 8 : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ...message.reactions.map((reaction) => Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Text(reaction.emoji),
+            )),
+            IconButton(
+              icon: const Icon(Icons.add_reaction_outlined, size: 16),
+              onPressed: () => onReactionAdd?.call(message.id),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(
+                minWidth: 24,
+                minHeight: 24,
               ),
+            ),
           ],
         ),
       ),
     );
+  }
+
+  String _formatTime(DateTime time) {
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }

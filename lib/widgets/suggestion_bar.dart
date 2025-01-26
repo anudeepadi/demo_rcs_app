@@ -1,64 +1,92 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
+import '../models/quick_reply.dart';
 
 class SuggestionBar extends StatelessWidget {
-  const SuggestionBar({Key? key}) : super(key: key);
+  final List<QuickReply> suggestions;
+  final VoidCallback? onSuggestionSelected;
 
-  static const List<String> _defaultSuggestions = [
-    "What's new?",
-    "Help",
-    "Features",
-    "Settings",
-    "About",
-  ];
+  const SuggestionBar({
+    Key? key,
+    required this.suggestions,
+    this.onSuggestionSelected,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: 50,
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor,
-          ),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        itemCount: _defaultSuggestions.length,
+        itemCount: suggestions.length,
         itemBuilder: (context, index) {
+          final suggestion = suggestions[index];
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: OutlinedButton(
-              onPressed: () {
-                final chatProvider = Provider.of<ChatProvider>(
-                  context,
-                  listen: false,
+            child: SuggestionChip(
+              suggestion: suggestion,
+              onTap: () {
+                context.read<ChatProvider>().addTextMessage(
+                  content: suggestion.text,
                 );
-                chatProvider.addTextMessage(_defaultSuggestions[index]);
+                onSuggestionSelected?.call();
               },
-              style: OutlinedButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                side: BorderSide(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              child: Text(_defaultSuggestions[index]),
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+class SuggestionChip extends StatelessWidget {
+  final QuickReply suggestion;
+  final VoidCallback? onTap;
+
+  const SuggestionChip({
+    Key? key,
+    required this.suggestion,
+    this.onTap,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Material(
+      color: colorScheme.primaryContainer,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: suggestion.isEnabled ? onTap : null,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 8,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (suggestion.icon != null) ...[
+                Icon(
+                  suggestion.icon,
+                  size: 16,
+                  color: colorScheme.onPrimaryContainer,
+                ),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                suggestion.text,
+                style: TextStyle(
+                  color: colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

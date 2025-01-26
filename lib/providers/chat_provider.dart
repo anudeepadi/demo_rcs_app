@@ -1,110 +1,114 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import '../models/chat_message.dart';
 import '../models/quick_reply.dart';
-import '../services/bot_service.dart';
-import 'package:uuid/uuid.dart';
-import 'dart:async';
+import 'package:path/path.dart' as path;
 
-class ChatProvider extends ChangeNotifier {
+class ChatProvider with ChangeNotifier {
   final List<ChatMessage> _messages = [];
-  List<ChatMessage> get messages => _messages;
-  final _uuid = Uuid();
-  final BotService _botService = BotService();
+  String? _currentUserId;
 
-  void addTextMessage(String content, {bool isMe = true}) {
-    final messageId = _uuid.v4();
+  List<ChatMessage> get messages => List.unmodifiable(_messages);
+  String? get currentUserId => _currentUserId;
+
+  void setCurrentUser(String userId) {
+    _currentUserId = userId;
+    notifyListeners();
+  }
+
+  Future<void> addTextMessage({
+    required String content,
+    String? replyToMessageId,
+    String? threadId,
+  }) async {
+    if (_currentUserId == null) return;
+
     final message = ChatMessage(
-      id: messageId,
-      content: content,
-      isMe: isMe,
-      timestamp: DateTime.now(),
+      senderId: _currentUserId!,
       type: MessageType.text,
-      status: MessageStatus.sent,
-    );
-    _messages.add(message);
-    notifyListeners();
-
-    if (isMe) {
-      _generateBotResponse(content);
-    }
-  }
-
-  void addGifMessage(String gifUrl, {bool isMe = true}) {
-    final messageId = _uuid.v4();
-    final message = ChatMessage(
-      id: messageId,
-      content: gifUrl,
-      isMe: isMe,
-      timestamp: DateTime.now(),
-      type: MessageType.gif,
-      mediaUrl: gifUrl,
-      status: MessageStatus.sent,
-    );
-    _messages.add(message);
-    notifyListeners();
-
-    if (isMe) {
-      _generateBotResponse('Can you react to this GIF?');
-    }
-  }
-
-  Future<void> sendTextMessage(String content, {String? replyToMessageId}) async {
-    if (content.trim().isEmpty) return;
-
-    final messageId = _uuid.v4();
-    final message = ChatMessage(
-      id: messageId,
       content: content,
       isMe: true,
-      timestamp: DateTime.now(),
-      type: MessageType.text,
-      status: MessageStatus.sending,
       parentMessageId: replyToMessageId,
-    );
-
-    _messages.add(message);
-    notifyListeners();
-
-    await Future.delayed(const Duration(milliseconds: 500));
-    _updateMessageStatus(messageId, MessageStatus.sent);
-    
-    _generateBotResponse(content);
-  }
-
-  Future<void> sendMedia(String mediaPath, MessageType type) async {
-    final messageId = _uuid.v4();
-    final message = ChatMessage(
-      id: messageId,
-      content: mediaPath,
-      isMe: true,
-      timestamp: DateTime.now(),
-      type: type,
-      mediaUrl: mediaPath,
+      threadId: threadId,
       status: MessageStatus.sending,
     );
 
     _messages.add(message);
     notifyListeners();
 
+    // Simulate network delay
     await Future.delayed(const Duration(seconds: 1));
-    _updateMessageStatus(messageId, MessageStatus.sent);
 
-    if (type == MessageType.image) {
-      _generateBotResponse('Can you describe this image?');
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    if (index != -1) {
+      _messages[index] = message.copyWith(status: MessageStatus.sent);
+      notifyListeners();
     }
   }
 
-  Future<void> sendFile(String filePath, String fileName, int fileSize) async {
-    final messageId = _uuid.v4();
+  Future<void> sendMedia({
+    required File file,
+    required MessageType type,
+    String? caption,
+    String? replyToMessageId,
+  }) async {
+    if (_currentUserId == null) return;
+
+    final fileName = path.basename(file.path);
+    final fileSize = await file.length();
+
     final message = ChatMessage(
-      id: messageId,
-      content: fileName,
+      senderId: _currentUserId!,
+      type: type,
+      content: caption ?? '',
       isMe: true,
-      timestamp: DateTime.now(),
-      type: MessageType.file,
-      mediaUrl: filePath,
+      mediaUrl: file.path,
       fileName: fileName,
       fileSize: fileSize,
+      parentMessageId: replyToMessageId,
+      status: MessageStatus.sending,
+    );
+
+    _messages.add(message);
+    notifyListeners();
+
+    // Simulate upload
+    await Future.delayed(const Duration(seconds: 2));
+
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    if (index != -1) {
+      _messages[index] = message.copyWith(status: MessageStatus.sent);
+      notifyListeners();
+    }
+  }
+
+  Future<void> sendFile({
+    required File file,
+    String? caption,
+    String? replyToMessageId,
+  }) async {
+    await sendMedia(
+      file: file,
+      type: MessageType.file,
+      caption: caption,
+      replyToMessageId: replyToMessageId,
+    );
+  }
+
+  Future<void> sendQuickReplies({
+    required List<QuickReply> replies,
+    String? content,
+    String? replyToMessageId,
+  }) async {
+    if (_currentUserId == null) return;
+
+    final message = ChatMessage(
+      senderId: _currentUserId!,
+      type: MessageType.quickReply,
+      content: content ?? '',
+      isMe: true,
+      suggestedReplies: replies.map((r) => r.text).toList(),
+      parentMessageId: replyToMessageId,
       status: MessageStatus.sending,
     );
 
@@ -112,42 +116,55 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
 
     await Future.delayed(const Duration(seconds: 1));
-    _updateMessageStatus(messageId, MessageStatus.sent);
-  }
 
-  void addQuickReplyMessage(List<QuickReply> suggestedReplies) {
-    final messageId = _uuid.v4();
-    final message = ChatMessage(
-      id: messageId,
-      content: '',
-      isMe: false,
-      timestamp: DateTime.now(),
-      type: MessageType.quickReply,
-      suggestedReplies: suggestedReplies,
-      status: MessageStatus.sent,
-    );
-    _messages.add(message);
-    notifyListeners();
+    final index = _messages.indexWhere((m) => m.id == message.id);
+    if (index != -1) {
+      _messages[index] = message.copyWith(status: MessageStatus.sent);
+      notifyListeners();
+    }
   }
 
   void addReaction(String messageId, String emoji) {
     final index = _messages.indexWhere((m) => m.id == messageId);
-    if (index != -1) {
+    if (index != -1 && _currentUserId != null) {
       final message = _messages[index];
-      final reaction = MessageReaction(
-        emoji: emoji,
-        userId: 'current_user',
-        timestamp: DateTime.now(),
-      );
+      final existingReactionIndex = message.reactions
+          .indexWhere((r) => r.userId == _currentUserId);
 
-      final updatedReactions = List<MessageReaction>.from(message.reactions)..add(reaction);
-      
+      if (existingReactionIndex != -1) {
+        // Update existing reaction
+        final updatedReactions = List<MessageReaction>.from(message.reactions);
+        updatedReactions[existingReactionIndex] = MessageReaction(
+          userId: _currentUserId!,
+          emoji: emoji,
+        );
+        _messages[index] = message.copyWith(reactions: updatedReactions);
+      } else {
+        // Add new reaction
+        final updatedReactions = List<MessageReaction>.from(message.reactions)
+          ..add(MessageReaction(
+            userId: _currentUserId!,
+            emoji: emoji,
+          ));
+        _messages[index] = message.copyWith(reactions: updatedReactions);
+      }
+      notifyListeners();
+    }
+  }
+
+  void removeReaction(String messageId) {
+    final index = _messages.indexWhere((m) => m.id == messageId);
+    if (index != -1 && _currentUserId != null) {
+      final message = _messages[index];
+      final updatedReactions = message.reactions
+          .where((r) => r.userId != _currentUserId)
+          .toList();
       _messages[index] = message.copyWith(reactions: updatedReactions);
       notifyListeners();
     }
   }
 
-  void _updateMessageStatus(String messageId, MessageStatus status) {
+  void updateMessageStatus(String messageId, MessageStatus status) {
     final index = _messages.indexWhere((m) => m.id == messageId);
     if (index != -1) {
       _messages[index] = _messages[index].copyWith(status: status);
@@ -155,47 +172,8 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _generateBotResponse(String userMessage) async {
-    final typingMessageId = _uuid.v4();
-    final typingMessage = ChatMessage(
-      id: typingMessageId,
-      content: 'Typing...',
-      isMe: false,
-      timestamp: DateTime.now(),
-      type: MessageType.text,
-      status: MessageStatus.sending,
-    );
-    
-    _messages.add(typingMessage);
-    notifyListeners();
-
-    final response = await _botService.generateResponse(userMessage);
-    
-    _messages.removeWhere((m) => m.id == typingMessageId);
-    
-    final messageId = _uuid.v4();
-    final responseMessage = ChatMessage(
-      id: messageId,
-      content: response,
-      isMe: false,
-      timestamp: DateTime.now(),
-      type: MessageType.text,
-      status: MessageStatus.sent,
-    );
-    
-    _messages.add(responseMessage);
-    
-    final quickReplies = BotService.getQuickReplies(response)
-        .map((qr) => QuickReply(
-              text: qr['text']!,
-              value: qr['value']!,
-            ))
-        .toList();
-        
-    if (quickReplies.isNotEmpty) {
-      addQuickReplyMessage(quickReplies);
-    }
-    
+  void clear() {
+    _messages.clear();
     notifyListeners();
   }
 }
